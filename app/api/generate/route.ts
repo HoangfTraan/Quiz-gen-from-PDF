@@ -36,9 +36,9 @@ export async function POST(req: Request) {
     // Cắt ngắn bớt nếu file quá dài (Tránh lỗi token)
     const truncatedText = pdfText.slice(0, 20000);
 
-    // --- CHIẾN THUẬT: THỬ OPENAI TRƯỚC ---
+    // --- THỬ OPENAI TRƯỚC ---
     try {
-      console.log("🤖 Đang thử dùng OpenAI...");
+      console.log("Đang thử dùng OpenAI...");
       
       if (!process.env.OPENAI_API_KEY) throw new Error("Thiếu OpenAI Key");
 
@@ -64,14 +64,14 @@ export async function POST(req: Request) {
 
     } catch (openAiError: any) {
       // --- NẾU OPENAI LỖI -> CHUYỂN SANG GEMINI ---
-      console.warn("⚠️ OpenAI thất bại (có thể do hết tiền/quota). Đang chuyển sang Gemini...");
+      console.warn("OpenAI thất bại (có thể do hết tiền/quota). Đang chuyển sang Gemini...");
       console.error("Lỗi OpenAI:", openAiError.message);
 
       if (!process.env.GEMINI_API_KEY) {
         throw new Error("OpenAI lỗi và không tìm thấy GEMINI_API_KEY để dự phòng.");
       }
 
-      console.log("💎 Đang dùng Gemini (Dự phòng)...");
+      console.log("Đang dùng Gemini (Dự phòng)...");
       const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
       const model = genAI.getGenerativeModel({ 
         model: "gemini-2.5-flash",
@@ -94,7 +94,7 @@ export async function POST(req: Request) {
     }
 
   } catch (error: any) {
-    console.error("❌ LỖI NGHIÊM TRỌNG:", error);
+    console.error("LỖI:", error);
     return NextResponse.json({ error: error.message || "Lỗi hệ thống" }, { status: 500 });
   }
 }
