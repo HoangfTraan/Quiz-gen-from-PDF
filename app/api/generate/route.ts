@@ -26,7 +26,7 @@ export async function POST(req: Request) {
 
     const arrayBuffer = await file.arrayBuffer();
     const buffer = Buffer.from(arrayBuffer);
-    
+
     // Parse PDF
     const pdfData = await pdf(buffer);
     pdfText = pdfData.text;
@@ -39,20 +39,22 @@ export async function POST(req: Request) {
     // --- THỬ OPENAI TRƯỚC ---
     try {
       console.log("Đang thử dùng OpenAI...");
-      
+
       if (!process.env.OPENAI_API_KEY) throw new Error("Thiếu OpenAI Key");
 
       const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
-      
+
       const completion = await openai.chat.completions.create({
         messages: [
           { role: "system", content: "Bạn là máy tạo quiz. Trả về JSON chuẩn." },
-          { 
-            role: "user", 
-            content: `Tạo 5 câu hỏi trắc nghiệm từ văn bản sau. 
-            Format JSON: { "quizzes": [{ "question": "...", "options": [], "answer": "...", "bloom_level": "...", "explanation": "..." }] }
+          {
+            role: "user",
+            content: `Tạo 5 câu hỏi trắc nghiệm từ văn bản sau. BẮT BUỘC phải có ít nhất 1 câu hỏi có NHIỀU ĐÁP ÁN ĐÚNG.
+            CHÚ Ý QUAN TRỌNG: Trường "answer" LUÔN LUÔN phải là một MẢNG (Array), ví dụ: ["A."] hoặc ["A.", "B."]. Không bao giờ trả về chuỗi.
+            Đừng quên thêm trường "title" là chuỗi text đại diện cho chủ đề chính của văn bản (dưới 10 từ).
+            Format JSON: { "title": "...", "quizzes": [{ "question": "...", "options": [], "answer": ["..."], "bloom_level": "...", "explanation": "..." }] }
             
-            Văn bản: ${truncatedText}` 
+            Văn bản: ${truncatedText}`
           }
         ],
         model: "gpt-4o-mini",
@@ -63,7 +65,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ source: "OpenAI", ...result });
 
     } catch (openAiError: any) {
-      // --- NẾU OPENAI LỖI -> CHUYỂN SANG GEMINI ---
+      // --- NẾU OPENAI LỖI THÌ CHUYỂN SANG GEMINI ---
       console.warn("OpenAI thất bại (có thể do hết tiền/quota). Đang chuyển sang Gemini...");
       console.error("Lỗi OpenAI:", openAiError.message);
 
@@ -73,21 +75,23 @@ export async function POST(req: Request) {
 
       console.log("Đang dùng Gemini (Dự phòng)...");
       const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-      const model = genAI.getGenerativeModel({ 
+      const model = genAI.getGenerativeModel({
         model: "gemini-2.5-flash",
         generationConfig: { responseMimeType: "application/json" }
       });
 
       const prompt = `
-        Tạo 5 câu hỏi trắc nghiệm từ văn bản dưới đây.
-        Yêu cầu Output JSON: { "quizzes": [{ "question": "...", "options": ["A.", "B.", "C.", "D."], "answer": "...", "bloom_level": "...", "explanation": "..." }] }
+        Tạo 5 câu hỏi trắc nghiệm từ văn bản dưới đây. BẮT BUỘC phải có ít nhất 1 câu hỏi có NHIỀU ĐÁP ÁN ĐÚNG.
+        CHÚ Ý QUAN TRỌNG: Trường "answer" LUÔN LUÔN phải là một MẢNG (Array), ví dụ: ["A."] hoặc ["A.", "B."]. Không bao giờ trả về chuỗi.
+        Đừng quên thêm trường "title" là chuỗi text đại diện cho chủ đề chính của văn bản (dưới 10 từ).
+        Yêu cầu Output JSON định dạng: { "title": "...", "quizzes": [{ "question": "...", "options": ["A.", "B.", "C.", "D."], "answer": ["..."], "bloom_level": "...", "explanation": "..." }] }
         
         Văn bản: "${truncatedText}"
       `;
 
       const result = await model.generateContent(prompt);
       const responseText = result.response.text();
-      
+
       // Parse JSON từ Gemini
       const geminiData = JSON.parse(responseText);
       return NextResponse.json({ source: "Gemini (Fallback)", ...geminiData });
