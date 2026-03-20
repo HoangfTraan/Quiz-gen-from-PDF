@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Upload, Loader2, BookOpen, PenTool, CheckCircle, XCircle, RefreshCw, Clock, History, PlusCircle, PanelLeftClose, Menu, Edit2, Trash2, Download, Check, X } from 'lucide-react';
+import { Upload, Loader2, BookOpen, PenTool, CheckCircle, XCircle, RefreshCw, Clock, History, PlusCircle, PanelLeftClose, Menu, Edit2, Trash2, Download, Check, X, AlertCircle } from 'lucide-react';
 
 // Định nghĩa kiểu dữ liệu
 interface Quiz {
@@ -92,6 +92,25 @@ export default function Home() {
   const [activeHistoryId, setActiveHistoryId] = useState<string | null>(null);
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
 
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [isClosingToast, setIsClosingToast] = useState(false);
+
+  useEffect(() => {
+    if (toastMessage) {
+      setIsClosingToast(false);
+      let closeTimer: ReturnType<typeof setTimeout>;
+      const timer = setTimeout(() => {
+        setIsClosingToast(true);
+        closeTimer = setTimeout(() => setToastMessage(null), 300);
+      }, 3000);
+      return () => {
+        clearTimeout(timer);
+        if (closeTimer) clearTimeout(closeTimer);
+      };
+    }
+  }, [toastMessage]);
+  const showToast = (msg: string) => setToastMessage(msg);
+
   const [editingHistoryId, setEditingHistoryId] = useState<string | null>(null);
   const [editingTitle, setEditingTitle] = useState("");
   const [isClosingEdit, setIsClosingEdit] = useState(false);
@@ -139,7 +158,13 @@ export default function Home() {
   // 1. Xử lý Upload file (Click chọn)
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files.length > 0) {
-      setFile(e.target.files[0]);
+      const selectedFile = e.target.files[0];
+      if (selectedFile.type === 'application/pdf' || selectedFile.name.toLowerCase().endsWith('.pdf')) {
+        setFile(selectedFile);
+      } else {
+        showToast("Vui lòng tải lên đúng định dạng vì trang chỉ hỗ trợ định dạng PDF.");
+        e.target.value = ''; // Reset input
+      }
     }
   };
 
@@ -176,11 +201,11 @@ export default function Home() {
         setHistory(prev => [newItem, ...prev]);
         setActiveHistoryId(newItem.id);
       } else {
-        alert("Không tạo được câu hỏi. Vui lòng thử lại.");
+        showToast("Không tạo được câu hỏi. Vui lòng thử lại.");
       }
     } catch (error) {
       console.error("Lỗi:", error);
-      alert("Có lỗi xảy ra khi kết nối server.");
+      showToast("Có lỗi xảy ra khi kết nối server.");
     } finally {
       setLoading(false);
     }
@@ -452,6 +477,16 @@ export default function Home() {
       {/* MAIN CONTENT AREA */}
       <main className="flex-1 p-6 relative overflow-y-auto h-full">
 
+        {/* TOAST THÔNG BÁO LỖI */}
+        {toastMessage && (
+          <div className={`fixed top-8 left-1/2 transform -translate-x-1/2 z-[200] transition-all duration-500 ${isSidebarOpen ? 'md:ml-[10rem]' : 'ml-0'}`}>
+            <div className={`bg-red-500 text-white px-6 py-4 rounded-xl shadow-2xl flex items-center gap-3 border border-red-400 ${isClosingToast ? 'animate-slide-out-top' : 'animate-toast-drop-in'}`}>
+              <AlertCircle size={24} className="shrink-0" />
+              <span className="font-semibold text-sm md:text-base">{toastMessage}</span>
+            </div>
+          </div>
+        )}
+
         {/* Nút Hamburger Mở Sidebar (Nổi góc trái) */}
         {!isSidebarOpen && (
           <button
@@ -463,7 +498,7 @@ export default function Home() {
           </button>
         )}
 
-        {/* 🌟 OVERLAY KÉO THẢ TOÀN TRANG */}
+        {/* OVERLAY KÉO THẢ TOÀN TRANG */}
         <div
           className={`fixed inset-0 z-[110] flex items-center justify-center bg-blue-700/95 transition-opacity duration-300 ease-out will-change-opacity ${isDragging ? 'opacity-100 visible' : 'opacity-0 invisible'
             }`}
@@ -481,7 +516,7 @@ export default function Home() {
                 setFile(droppedFile);
                 setMode('upload');
               } else {
-                alert("Vui lòng chọn file PDF.");
+                showToast("Vui lòng tải lên đúng định dạng vì trang chỉ hỗ trợ định dạng PDF.");
               }
             }
           }}
@@ -742,7 +777,7 @@ export default function Home() {
           )}
         </div>
 
-        {/* 🌟 OVERLAY LOADING KHI THI LẠI */}
+        {/* OVERLAY LOADING KHI THI LẠI */}
         {isRetaking && (
           <div className="fixed inset-0 z-[100] flex items-center justify-center bg-gray-100/80 animate-fade-in-blur">
             <div className="flex flex-col items-center bg-white p-10 rounded-3xl shadow-2xl border border-gray-100 animate-slide-in-left">
@@ -753,7 +788,7 @@ export default function Home() {
           </div>
         )}
 
-        {/* 🌟 OVERLAY XÁC NHẬN XÓA */}
+        {/* OVERLAY XÁC NHẬN XÓA */}
         {deleteConfirmId && (
           <div className={`fixed inset-0 z-[120] flex items-center justify-center bg-gray-900/60 ${isClosingModal ? 'animate-fade-out-blur' : 'animate-fade-in-blur'}`}>
             <div className={`bg-white p-6 rounded-3xl shadow-2xl border border-gray-100 w-full max-w-sm mx-4 origin-center ${isClosingModal ? 'animate-pop-out' : 'animate-pop-in'}`}>

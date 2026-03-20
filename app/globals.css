@@ -165,3 +165,37 @@ body {
   animation: slideUpOut 0.4s cubic-bezier(0.4, 0, 0.2, 1) forwards;
   transform-origin: top;
 }
+
+@keyframes slideOutTop {
+  from {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  to {
+    opacity: 0;
+    transform: translateY(-20px);
+  }
+}
+
+.animate-slide-out-top {
+  animation: slideOutTop 0.3s ease-in forwards;
+}
+
+@keyframes toastDropIn {
+  0% {
+    opacity: 0;
+    transform: translateY(-40px) scale(0.8);
+  }
+  50% {
+    opacity: 1;
+    transform: translateY(0) scale(1.08);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.animate-toast-drop-in {
+  animation: toastDropIn 0.5s ease-out forwards;
+}
