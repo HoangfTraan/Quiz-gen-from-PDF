@@ -78,6 +78,8 @@ async function callKyma(
       { role: 'system', content: systemPrompt },
       { role: 'user', content: prompt },
     ],
+    //FUNCTION CALLING / JSON MODE CHO OPENAI
+    // Bắt buộc model phải trả về định dạng JSON thay vì text tự do.
     ...(mode === 'json' ? { response_format: { type: 'json_object' } } : {}),
   });
 
@@ -96,6 +98,8 @@ async function callGemini(
 
   const model = client.getGenerativeModel({
     model: 'gemini-2.5-flash',
+    // FUNCTION CALLING / JSON MODE CHO GEMINI
+    // Bắt buộc Gemini phải trả dữ liệu dưới dạng JSON (application/json)
     ...(mode === 'json'
       ? { generationConfig: { responseMimeType: 'application/json' } }
       : {}),
@@ -220,14 +224,20 @@ export async function generateJSON<T = any>(
   let content = result.content.trim();
   let data: T;
   
-  // Xóa bỏ cụm markdown ```json nếu model nhả rác
+  // ==========================================
+  // CHÚ THÍCH: BẮT ĐẦU QUÁ TRÌNH CHUẨN HÓA JSON (JSON NORMALIZATION)
+  // Bước 1: Xóa bỏ cụm markdown ```json nếu model nhả rác (thường gặp ở local AI hoặc cấu hình yếu)
+  // ==========================================
   if (content.startsWith('```')) {
     content = content.replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/i, '').trim();
   }
 
   try {
+    // Bước 2: Thử parse (dịch) nội dung sang Object (định dạng máy tính có thể đọc)
     data = JSON.parse(content) as T;
   } catch (err) {
+    // Bước 3: Fallback dọn rác nâng cao - Trích xuất phần lõi JSON an toàn
+    // Tìm dấu ngoặc nhọn mở đầu tiên và đóng cuối cùng, loại bỏ toàn bộ text mô tả thừa của AI xung quanh.
     const start = content.indexOf('{');
     const end = content.lastIndexOf('}');
     if (start >= 0 && end > start) {
@@ -237,6 +247,7 @@ export async function generateJSON<T = any>(
       throw new Error("Lấy dữ liệu AI thất bại do sai định dạng JSON: " + (err as Error).message);
     }
   }
+  // KẾT THÚC QUÁ TRÌNH CHUẨN HÓA JSON ==========================================
 
   return { source: result.source, fallback: result.fallback, data };
 }

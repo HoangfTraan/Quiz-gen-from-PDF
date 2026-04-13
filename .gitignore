@@ -40,3 +40,9 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+#scratch scripts
+test_db.js
+test_db2.js
+test_chunk.js
+ts_error.txt

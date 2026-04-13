@@ -23,6 +23,7 @@ export default async function QuizDetailsPage({ params }: { params: Promise<{ id
        id,
        question_text,
        explanation,
+       difficulty,
        question_options (id, option_label, option_text, is_correct)
     `)
     .eq('quiz_id', id);

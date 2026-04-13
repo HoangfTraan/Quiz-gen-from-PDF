@@ -15,6 +15,23 @@ export default function ExamPage({ params }: { params: Promise<{ id: string }> }
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [selectedAnswers, setSelectedAnswers] = useState<Record<string, string>>({}); // question_id -> option_id
+  const [filter, setFilter] = useState("all");
+
+  const parseExplanation = (text?: string) => {
+    if (!text) return { diff: null, text: '' };
+    const tagMatch = text.match(/^\[MỨC ĐỘ:\s*(.*?)\]\s*(.*)/is);
+    if (tagMatch) return { diff: tagMatch[1].trim(), text: tagMatch[2] };
+    const aiMatch = text.match(/^(?:Đây là )?(?:câu hỏi )?(?:ở )?(?:mức độ|cấp độ)\s+([^.]*?)\.\s*(.*)/is);
+    if (aiMatch) return { diff: aiMatch[1].trim(), text: aiMatch[2] };
+    return { diff: null, text };
+  };
+
+  const filteredQuestions = questions.filter((q: any) => {
+    const qDiff = parseExplanation(q.explanation).diff?.toLowerCase() || "none";
+    if (filter === "all") return true;
+    return qDiff === filter.toLowerCase();
+  });
+  const uniqueDifficulties = Array.from(new Set(questions.map((q: any) => parseExplanation(q.explanation).diff).filter(Boolean)));
 
   useEffect(() => {
     async function loadQuestions() {
@@ -23,6 +40,7 @@ export default function ExamPage({ params }: { params: Promise<{ id: string }> }
         .select(`
           id,
           question_text,
+          explanation,
           question_options (id, option_label, option_text, is_correct)
         `)
         .eq('quiz_id', id);
@@ -47,7 +65,7 @@ export default function ExamPage({ params }: { params: Promise<{ id: string }> }
         const answersToInsert = [];
 
         // Compute correct answers locally
-        for (const q of questions) {
+        for (const q of filteredQuestions) {
             const selectedOptId = selectedAnswers[q.id];
             const isCorrect = q.question_options.find((o: any) => o.id === selectedOptId)?.is_correct || false;
             if (isCorrect) totalCorrect++;
@@ -64,7 +82,7 @@ export default function ExamPage({ params }: { params: Promise<{ id: string }> }
         const { data: attempt, error: attemptErr } = await supabase.from('quiz_attempts').insert({
             user_id: user.id,
             quiz_id: id,
-            total_questions: questions.length,
+            total_questions: filteredQuestions.length,
             total_correct: totalCorrect
         }).select().single();
 
@@ -108,12 +126,46 @@ export default function ExamPage({ params }: { params: Promise<{ id: string }> }
            <PlayCircle className="text-orange-500" size={20} /> Đang làm bài thi
         </div>
         <div className="text-gray-500 text-sm font-medium shrink-0 bg-gray-50 px-3 py-1 rounded-full border border-gray-100">
-           Đã câu: <span className="font-bold text-blue-600">{Object.keys(selectedAnswers).length}</span><span className="text-gray-400">/{questions.length}</span>
+           Đã làm: <span className="font-bold text-blue-600">{Object.keys(selectedAnswers).length}</span><span className="text-gray-400">/{filteredQuestions.length}</span>
         </div>
       </div>
 
+      {questions.length > 0 && (
+        <div className="flex flex-wrap items-center gap-2 mb-8 bg-white p-4 rounded-xl shadow-sm border border-orange-100">
+          <span className="text-sm font-bold text-orange-600 mr-2 uppercase tracking-tight">Chế độ luyện tập:</span>
+          <button
+            onClick={() => setFilter("all")}
+            className={`px-4 py-2 rounded-lg text-xs font-black transition-all shadow-md uppercase tracking-wider ${filter === "all" ? "bg-orange-500 text-white scale-105" : "bg-white text-gray-600 border border-gray-200 hover:bg-gray-50 hover:border-gray-300"}`}
+          >
+            Toàn bộ đề thi
+          </button>
+          {uniqueDifficulties.map((diff: any) => (
+            <button
+              key={diff}
+              onClick={() => setFilter(diff.toLowerCase())}
+              className={`px-4 py-2 rounded-lg text-xs font-black transition-all shadow-md uppercase tracking-wider ${filter === diff.toLowerCase() ? "bg-orange-500 text-white scale-105" : "bg-white text-gray-600 border border-gray-200 hover:bg-gray-50 hover:border-gray-300"}`}
+            >
+              Cấp độ: {diff}
+            </button>
+          ))}
+          {questions.some((q: any) => !parseExplanation(q.explanation).diff) && (
+             <button
+                onClick={() => setFilter("none")}
+                className={`px-4 py-2 rounded-lg text-xs font-black transition-all shadow-md uppercase tracking-wider ${filter === "none" ? "bg-gray-600 text-white scale-105" : "bg-white text-gray-400 border border-gray-200 hover:bg-gray-50 hover:border-gray-300"}`}
+             >
+               Chưa phân loại
+             </button>
+          )}
+        </div>
+      )}
+
+      {filteredQuestions.length === 0 ? (
+        <div className="text-center bg-gray-50 border border-gray-100 rounded-xl p-10 text-gray-500 font-medium">
+          Không có câu hỏi nào thuộc phân loại này.
+        </div>
+      ) : (
       <div className="space-y-8">
-        {questions.map((quiz, qIndex) => {
+        {filteredQuestions.map((quiz, qIndex) => {
           const selected = selectedAnswers[quiz.id];
 
           // Sort options A, B, C, D stably
@@ -152,13 +204,14 @@ export default function ExamPage({ params }: { params: Promise<{ id: string }> }
         <div className="flex justify-center pt-8 pb-12">
           <button
             onClick={handleSubmit}
-            disabled={submitting || questions.length === 0}
+            disabled={submitting || filteredQuestions.length === 0}
             className="bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:hover:scale-100 disabled:cursor-not-allowed text-white font-black py-4 px-12 rounded-full shadow-xl shadow-blue-500/30 text-lg transform hover:scale-105 transition-all w-full md:w-auto flex justify-center items-center gap-2"
           >
             {submitting ? <><Loader2 className="animate-spin" size={24} /> ĐANG NỘP BÀI...</> : "NỘP BÀI THI"}
           </button>
         </div>
       </div>
+      )}
     </div>
   );
 }

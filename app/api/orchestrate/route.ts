@@ -169,19 +169,57 @@ async function processDocument(documentId: string, accessToken: string, refreshT
                         const qPerThisChunk = Math.min(questionsPerChunk, remaining);
                         const prompt = `Nhiệm vụ: Đọc kỹ đoạn nội dung sau và tạo ra ${qPerThisChunk} câu hỏi trắc nghiệm bám sát kiến thức trong bài.
 Yêu cầu:
-1. Các câu hỏi cần được phân bổ đa dạng dựa theo Thang đo Bloom (Bloom's Taxonomy) bao gồm nhiều cấp độ: Nhớ (Remember), Hiểu (Understand), Vận dụng (Apply), Phân tích (Analyze).
+1. Các câu hỏi cần được phân bổ đa dạng dựa theo Thang đo Bloom (Bloom's Taxonomy) bao gồm nhiều cấp độ: Nhớ (Remember), Hiểu (Understand), Vận dụng (Apply), Phân tích (Analyze), Đánh giá (Evaluate), Sáng tạo (Create).
 2. Câu hỏi phải rõ nghĩa, không mơ hồ.
-TRẢ VỀ ĐÚNG ĐỊNH DẠNG JSON sau: {"questions": [ {"question_text": "Câu hỏi...", "options": ["A", "B", "C", "D"], "correct_index": 0, "explanation": "Giải thích chi tiết (Phần này nhắc lại kiến thức liên quan)"} ] }
-Nội dung:\n"""\n${chunksToProcess[i].content}\n"""`;
+TRẢ VỀ ĐÚNG ĐỊNH ĐẠNG JSON sau: 
+{
+  "questions": [ 
+    {
+      "question_text": "Câu hỏi...", 
+      "options": ["A", "B", "C", "D"], 
+      "correct_index": 0, 
+      "explanation": "Giải thích chi tiết",
+      "difficulty": "Chọn 1 trong: [Nhớ, Hiểu, Vận dụng, Phân tích, Đánh giá, Sáng tạo]"
+    } 
+  ] 
+}
 
+Nội dung đoạn trích:
+"""
+${chunksToProcess[i].content}
+"""`;
                         const { data: aiData, source } = await generateJSON(
                             prompt,
-                            'Bạn là một chuyên gia giáo dục và thầy giáo ra đề đánh giá năng lực chuyên nghiệp. Trả về định dạng JSON.'
+                            'Bạn là một chuyên gia giáo dục và thầy giáo ra đề đánh giá năng lực chuyên nghiệp. Phải gán đúng mức độ Bloom Taxonomy cho mỗi câu hỏi.'
                         );
 
+                        const BLOOM_LEVELS = ["Nhớ", "Hiểu", "Vận dụng", "Phân tích", "Đánh giá", "Sáng tạo"];
+                        const guessBloomLevel = (text: string, explanation: string) => {
+                            const lower = (text + " " + explanation).toLowerCase();
+                            if (lower.includes("sáng tạo") || lower.includes("thiết kế") || lower.includes("xây dựng")) return "Sáng tạo";
+                            if (lower.includes("đánh giá") || lower.includes("nhận xét") || lower.includes("phê bình")) return "Đánh giá";
+                            if (lower.includes("phân tích") || lower.includes("tại sao") || lower.includes("so sánh")) return "Phân tích";
+                            if (lower.includes("vận dụng") || lower.includes("giải quyết") || lower.includes("tính toán")) return "Vận dụng";
+                            if (lower.includes("hiểu") || lower.includes("giải thích") || lower.includes("mô tả")) return "Hiểu";
+                            return "Nhớ";
+                        };
+
                         for (const q of aiData.questions) {
+                           let diff = q.difficulty;
+                           if (!diff || !BLOOM_LEVELS.some(l => diff.includes(l))) {
+                              diff = guessBloomLevel(q.question_text, q.explanation || "");
+                           }
+                           const difficultyTag = `[MỨC ĐỘ: ${diff.toUpperCase()}] `;
+
                            const { data: dbQuestion, error: qInsertErr } = await supabase.from('questions').insert({
-                              quiz_id: qId, document_chunk_id: chunksToProcess[i].id, question_text: q.question_text, question_type: 'mcq', explanation: q.explanation, ai_generated: true, quality_score: 100
+                              quiz_id: qId, 
+                              document_chunk_id: chunksToProcess[i].id, 
+                              question_text: q.question_text, 
+                              question_type: 'mcq', 
+                              explanation: difficultyTag + (q.explanation || ''),
+                              difficulty: diff,
+                              ai_generated: true, 
+                              quality_score: 100
                            }).select().single();
                            
                            if (qInsertErr) {
