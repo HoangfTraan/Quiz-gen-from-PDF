@@ -1,9 +1,10 @@
 "use client";
 
 import { useState } from "react";
-import { Edit3, CheckCircle, ListChecks, Plus, Trash2, X, Save, Loader2 } from "lucide-react";
+import { Edit3, CheckCircle, ListChecks, Plus, Trash2, X, Save, Loader2, AlertTriangle, Flag, ShieldAlert } from "lucide-react";
 import { createClient } from "@/utils/supabase/client";
 import { useRouter } from "next/navigation";
+import ConfirmModal from "@/components/ConfirmModal";
 
 export default function QuestionList({ initialQuestions, quizId }: { initialQuestions: any[], quizId: string }) {
   const [questions, setQuestions] = useState(initialQuestions || []);
@@ -166,22 +167,33 @@ export default function QuestionList({ initialQuestions, quizId }: { initialQues
     }
   };
 
-  const handleDelete = async (id: string, e: React.MouseEvent) => {
+  const [questionToDelete, setQuestionToDelete] = useState<string | null>(null);
+
+  const handleDelete = (id: string, e: React.MouseEvent) => {
     e.stopPropagation();
-    if (!confirm("Bạn có chắc muốn xóa câu hỏi này?")) return;
+    setQuestionToDelete(id);
+  };
+
+  const executeDeleteQuestion = async () => {
+    if (!questionToDelete) return;
     try {
-      await supabase.from("questions").delete().eq("id", id);
-      const newQuestions = questions.filter(q => q.id !== id);
+      await supabase.from("questions").delete().eq("id", questionToDelete);
+      const newQuestions = questions.filter(q => q.id !== questionToDelete);
       setQuestions(newQuestions);
       await supabase.from("quizzes").update({ total_questions: newQuestions.length }).eq("id", quizId);
       router.refresh();
     } catch (err) {
       console.error(err);
       alert("Lỗi khi xóa câu hỏi");
+    } finally {
+      setQuestionToDelete(null);
     }
   };
 
   const uniqueDifficulties = Array.from(new Set(questions.map((q: any) => parseExplanation(q.explanation, q.difficulty).diff).filter(Boolean)));
+
+  const activeQuestions = questions.filter(q => !['flagged', 'error'].includes(q.moderation_status));
+  const hiddenQuestions = questions.filter(q => ['flagged', 'error'].includes(q.moderation_status));
 
   return (
     <div className="space-y-6">
@@ -214,7 +226,7 @@ export default function QuestionList({ initialQuestions, quizId }: { initialQues
         </div>
       )}
 
-      {questions.map((q: any, index: number) => {
+      {activeQuestions.map((q: any, index: number) => {
         const qDiff = parseExplanation(q.explanation, q.difficulty).diff?.toLowerCase() || "none";
         if (filter !== "all" && qDiff !== filter) return null;
 
@@ -548,6 +560,52 @@ export default function QuestionList({ initialQuestions, quizId }: { initialQues
         </div>
       )}
 
+      {hiddenQuestions.length > 0 && (
+        <div className="mt-16 pt-12 border-t-2 border-dashed border-gray-100 space-y-8">
+          <div className="flex items-center gap-3 px-5 py-3 bg-amber-50 rounded-2xl border border-amber-100 w-fit">
+            <ShieldAlert className="text-amber-600" size={24} />
+            <div>
+              <h3 className="text-lg font-black text-amber-900 leading-none">Câu hỏi bị ẩn ({hiddenQuestions.length})</h3>
+              <p className="text-xs text-amber-600 mt-1 font-bold uppercase tracking-tight">Đang chờ AI học lại hoặc Admin chỉnh sửa</p>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 gap-6 opacity-40 grayscale-[0.5] pointer-events-none select-none">
+            {hiddenQuestions.map((q: any) => {
+              const sortedOptions = [...(q.question_options || [])].sort((a: any, b: any) => a.option_label.localeCompare(b.option_label));
+              return (
+                <div key={q.id} className="bg-white p-6 rounded-xl border-2 border-gray-100 relative overflow-hidden">
+                  <div className="absolute top-0 right-0 p-3 bg-amber-100 text-amber-700 font-black text-[10px] uppercase tracking-widest rounded-bl-xl flex items-center gap-1.5 border-b border-l border-amber-200">
+                    {q.moderation_status === 'flagged' ? <Flag size={12} /> : <ShieldAlert size={12} />}
+                    {q.moderation_status === 'flagged' ? "Chất lượng kém" : "Lỗi nội dung"}
+                  </div>
+                  
+                  <div className="mb-4">
+                    <p className="text-sm font-bold text-amber-800 mb-2 flex items-center gap-2">
+                       {q.moderation_status === 'flagged' ? "🚩" : "⚠️"} Lý do ẩn: 
+                       <span className="font-medium italic">
+                          {q.moderation_status === 'flagged' 
+                            ? "AI tạo nội dung chưa rõ nghĩa hoặc quá đơn giản." 
+                            : "Phát hiện sai sót về kiến thức thực tế hoặc lỗi định dạng."}
+                       </span>
+                    </p>
+                    <h4 className="font-bold text-gray-400 italic leading-relaxed">Câu hỏi: {q.question_text}</h4>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2 mb-4">
+                    {sortedOptions.map((opt: any) => (
+                      <div key={opt.id} className="p-2 border border-gray-100 rounded text-xs text-gray-300 font-medium">
+                        {opt.option_label}. {opt.option_text}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
       {editingId !== "new" && (
         <button
           onClick={handleAdd}
@@ -556,6 +614,17 @@ export default function QuestionList({ initialQuestions, quizId }: { initialQues
           <Plus size={18} /> Nhập thủ công thêm 1 câu hỏi
         </button>
       )}
+
+      <ConfirmModal 
+        isOpen={!!questionToDelete}
+        onClose={() => setQuestionToDelete(null)}
+        onConfirm={executeDeleteQuestion}
+        title="Xóa câu hỏi?"
+        message="Bạn có chắc chắn muốn xóa câu hỏi này khỏi bộ đề? Hành động này không thể hoàn tác."
+        confirmText="Xác nhận xóa"
+        cancelText="Để mình xem lại"
+        isDestructive={true}
+      />
     </div>
   );
 }

@@ -1,24 +1,45 @@
 import Link from "next/link";
 import { BookOpen, PlusCircle } from "lucide-react";
 import { createClient } from "@/utils/supabase/server";
+import Pagination from "./Pagination";
 
-export default async function QuizzesPage() {
+export default async function QuizzesPage(props: { 
+  searchParams: Promise<{ page?: string }> 
+}) {
+  const searchParams = await props.searchParams;
+  const page = parseInt(searchParams.page || "1");
+  const pageSize = 9;
+  
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
 
   let quizzes: any[] = [];
+  let totalItems = 0;
+
   if (user) {
+    // 1. Get total count
+    const { count } = await supabase
+      .from("quizzes")
+      .select("*", { count: 'exact', head: true })
+      .eq("user_id", user.id);
+    
+    totalItems = count || 0;
+
+    // 2. Get paginated data
     const { data } = await supabase
       .from("quizzes")
       .select("*, questions(count)")
       .eq("user_id", user.id)
-      .order("created_at", { ascending: false });
+      .order("created_at", { ascending: false })
+      .range((page - 1) * pageSize, page * pageSize - 1);
     
     if (data) quizzes = data;
   }
 
+  const totalPages = Math.ceil(totalItems / pageSize);
+
   return (
-    <div className="animate-slide-in-left">
+    <div>
       <div className="flex justify-between items-center mb-6">
         <h1 className="text-2xl font-extrabold text-gray-800">Danh sách Bộ Câu hỏi</h1>
         <Link 
@@ -32,11 +53,11 @@ export default async function QuizzesPage() {
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {quizzes.length === 0 ? (
-          <div className="col-span-full py-12 text-center text-gray-500 font-medium">
+          <div className="col-span-full py-12 text-center text-gray-500 font-medium pb-20">
              Bạn chưa tạo Bộ câu hỏi nào. <Link href="/quizzes/create" className="text-blue-600 hover:underline">Tạo ngay</Link>
           </div>
         ) : quizzes.map(quiz => (
-          <div key={quiz.id} className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 hover:shadow-md transition-shadow">
+          <div key={quiz.id} className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 hover:shadow-md transition-shadow flex flex-col">
             <div className="flex justify-between items-start mb-4">
               <div className="p-2 bg-blue-100 text-blue-600 rounded-lg">
                 <BookOpen size={20} />
@@ -48,12 +69,12 @@ export default async function QuizzesPage() {
               </span>
             </div>
             
-            <h3 className="font-bold text-lg text-gray-800 mb-1 line-clamp-2">{quiz.title}</h3>
+            <h3 className="font-bold text-lg text-gray-800 mb-1 line-clamp-2 min-h-[56px]">{quiz.title}</h3>
             <p className="text-sm text-gray-500 mb-4">{quiz.total_questions || quiz.questions?.[0]?.count || 0} câu hỏi</p>
             
-            <div className="flex gap-2 mt-4 pt-4 border-t border-gray-100">
+            <div className="flex gap-2 mt-auto pt-4 border-t border-gray-100">
               <Link href={`/quizzes/${quiz.id}`} className="flex-1 text-center bg-gray-50 hover:bg-gray-100 text-gray-700 py-2 rounded-lg text-sm font-medium transition-colors">
-                Chỉnh sửa
+                {quiz.status === 'published' ? 'Xem' : 'Chỉnh sửa'}
               </Link>
               <Link href={`/quizzes/${quiz.id}/start`} className="flex-1 text-center bg-blue-50 hover:bg-blue-100 text-blue-700 py-2 rounded-lg text-sm font-medium transition-colors">
                 Làm bài ngay
@@ -62,6 +83,13 @@ export default async function QuizzesPage() {
           </div>
         ))}
       </div>
+
+      <Pagination 
+        currentPage={page} 
+        totalPages={totalPages} 
+        totalItems={totalItems} 
+        pageSize={pageSize} 
+      />
     </div>
   );
 }

@@ -21,6 +21,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [userName, setUserName] = useState("Người dùng");
   const [userInitial, setUserInitial] = useState("U");
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
   const [isAdmin, setIsAdmin] = useState(false);
   const pathname = usePathname();
   const supabase = createClient();
@@ -29,13 +30,16 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     const fetchUser = async () => {
       const { data: { user } } = await supabase.auth.getUser();
       if (user) {
-        const { data: dbUser } = await supabase.from('users').select('full_name, role').eq('id', user.id).single();
+        const { data: dbUser } = await supabase.from('users').select('full_name, role, avatar').eq('id', user.id).single();
         if (dbUser?.full_name) {
            setUserName(dbUser.full_name);
            setUserInitial(dbUser.full_name.charAt(0).toUpperCase());
         } else if (user.email) {
            setUserName(user.email);
            setUserInitial(user.email.charAt(0).toUpperCase());
+        }
+        if (dbUser?.avatar) {
+           setAvatarUrl(dbUser.avatar);
         }
         if (dbUser?.role === 'admin') {
            setIsAdmin(true);
@@ -113,8 +117,12 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
               </Link>
             )}
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center text-blue-600 font-bold shrink-0">
-                {userInitial}
+              <div className="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center text-blue-600 font-bold shrink-0 overflow-hidden border border-gray-100 shadow-sm">
+                {avatarUrl ? (
+                  <img src={avatarUrl} alt="Avatar" className="w-full h-full object-cover" />
+                ) : (
+                  userInitial
+                )}
               </div>
               <div className="overflow-hidden flex-1">
                 <p className="font-semibold text-sm truncate" title={userName}>{userName}</p>

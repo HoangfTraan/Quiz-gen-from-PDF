@@ -1,8 +1,10 @@
 import Link from "next/link";
-import { BookOpen, AlertCircle } from "lucide-react";
+import { BookOpen, AlertCircle, CheckCircle2 } from "lucide-react";
 import { login } from "../actions";
 
-export default async function LoginPage(props: { searchParams: Promise<{ error?: string }> }) {
+export default async function LoginPage(props: {
+  searchParams: Promise<{ error?: string; success?: string }>;
+}) {
   const searchParams = await props.searchParams;
   return (
     <div className="sm:mx-auto sm:w-full sm:max-w-md animate-slide-in-right">
@@ -27,6 +29,12 @@ export default async function LoginPage(props: { searchParams: Promise<{ error?:
             <div className="mb-4 p-3 bg-red-50 text-red-700 border border-red-200 rounded-lg flex items-center gap-2 text-sm">
               <AlertCircle size={16} className="shrink-0" />
               {searchParams.error}
+            </div>
+          )}
+          {searchParams?.success && (
+            <div className="mb-4 p-3 bg-green-50 text-green-700 border border-green-200 rounded-lg flex items-center gap-2 text-sm">
+              <CheckCircle2 size={16} className="shrink-0" />
+              {searchParams.success}
             </div>
           )}
           <form className="space-y-6" action={login}>

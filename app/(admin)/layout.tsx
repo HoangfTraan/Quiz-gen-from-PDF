@@ -23,7 +23,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     { name: "Người dùng", href: "/admin/users", icon: Users },
     { name: "Tài liệu", href: "/admin/documents", icon: Files },
     { name: "Câu hỏi", href: "/admin/questions", icon: HelpCircle },
-    { name: "Tiến trình AI", href: "/admin/ai-jobs", icon: Activity },
+    // { name: "Tiến trình AI", href: "/admin/ai-jobs", icon: Activity },
   ];
 
   return (

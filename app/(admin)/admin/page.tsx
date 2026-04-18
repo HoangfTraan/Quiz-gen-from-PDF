@@ -8,13 +8,20 @@ export default async function AdminDashboardPage() {
   const { count: docsCount } = await supabase.from('documents').select('*', { count: 'exact', head: true });
   const { count: quizzesCount } = await supabase.from('quizzes').select('*', { count: 'exact', head: true });
   
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const { count: quizzesToday } = await supabase
+    .from('quizzes')
+    .select('*', { count: 'exact', head: true })
+    .gte('created_at', today.toISOString());
+  
   const { data: failedDocs } = await supabase.from('documents').select('id, title, created_at').eq('status', 'failed').limit(5);
 
   return (
-    <div className="animate-slide-in-left">
+    <div>
       <h1 className="text-3xl font-extrabold text-gray-900 mb-8">Tổng quan Hệ thống</h1>
       
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-10">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-10">
         <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-200">
           <div className="flex items-center justify-between mb-4">
             <h3 className="text-gray-500 font-semibold">Tổng User</h3>
@@ -39,16 +46,9 @@ export default async function AdminDashboardPage() {
             <div className="p-3 bg-orange-100 text-orange-600 rounded-xl"><FileText size={20}/></div>
           </div>
           <p className="text-3xl font-black text-gray-800">{quizzesCount || 0}</p>
-          <p className="text-sm text-gray-400 font-medium mt-2">Trạng thái Bình thường</p>
-        </div>
-        
-        <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-200">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-gray-500 font-semibold">Tài nguyên AI</h3>
-            <div className="p-3 bg-red-100 text-red-600 rounded-xl"><Activity size={20}/></div>
-          </div>
-          <p className="text-3xl font-black text-gray-800">0%</p>
-          <p className="text-sm text-gray-400 font-medium mt-2">Chưa đo lường</p>
+          <p className="text-sm text-green-600 font-semibold mt-2">
+            +{quizzesToday || 0} bộ đề mới hôm nay
+          </p>
         </div>
       </div>
 

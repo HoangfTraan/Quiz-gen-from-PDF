@@ -1,13 +1,11 @@
-import Link from "next/link";
-import { BookOpen, AlertCircle, CheckCircle2 } from "lucide-react";
-import { forgotPassword } from "../actions";
+import { AlertCircle, BookOpen } from "lucide-react";
+import { updatePassword } from "../actions";
 
-export default async function ForgotPasswordPage(props: {
-  searchParams: Promise<{ error?: string; success?: string }>;
+export default async function ResetPasswordPage(props: {
+  searchParams: Promise<{ error?: string }>;
 }) {
   const searchParams = await props.searchParams;
   const error = searchParams.error;
-  const success = searchParams.success;
 
   return (
     <div className="sm:mx-auto sm:w-full sm:max-w-md">
@@ -17,10 +15,10 @@ export default async function ForgotPasswordPage(props: {
         </div>
       </div>
       <h2 className="mt-6 text-center text-3xl font-extrabold text-gray-900">
-        Khôi phục mật khẩu
+        Đặt lại mật khẩu
       </h2>
       <p className="mt-2 text-center text-sm text-gray-600">
-        Nhập email của bạn để nhận liên kết khôi phục.
+        Nhập mật khẩu mới cho tài khoản của bạn.
       </p>
 
       <div className="mt-8 sm:mx-auto sm:w-full sm:max-w-md">
@@ -32,24 +30,31 @@ export default async function ForgotPasswordPage(props: {
             </div>
           )}
 
-          {success && (
-            <div className="mb-4 p-3 bg-green-50 border border-green-200 text-green-600 rounded-lg flex items-center gap-2 text-sm">
-              <CheckCircle2 size={18} />
-              <span>{success}</span>
-            </div>
-          )}
-
-          <form className="space-y-6" action={forgotPassword}>
+          <form className="space-y-6" action={updatePassword}>
             <div>
-              <label htmlFor="email" className="block text-sm font-medium text-gray-700">
-                Địa chỉ Email
+              <label htmlFor="password" className="block text-sm font-medium text-gray-700">
+                Mật khẩu mới
               </label>
               <div className="mt-1">
                 <input
-                  id="email"
-                  name="email"
-                  type="email"
-                  autoComplete="email"
+                  id="password"
+                  name="password"
+                  type="password"
+                  required
+                  className="appearance-none block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-yellow-500 focus:border-yellow-500 sm:text-sm"
+                />
+              </div>
+            </div>
+
+            <div>
+              <label htmlFor="confirmPassword" className="block text-sm font-medium text-gray-700">
+                Xác nhận mật khẩu mới
+              </label>
+              <div className="mt-1">
+                <input
+                  id="confirmPassword"
+                  name="confirmPassword"
+                  type="password"
                   required
                   className="appearance-none block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-yellow-500 focus:border-yellow-500 sm:text-sm"
                 />
@@ -61,14 +66,8 @@ export default async function ForgotPasswordPage(props: {
                 type="submit"
                 className="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-yellow-600 hover:bg-yellow-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-yellow-500"
               >
-                Gửi liên kết khôi phục
+                Cập nhật mật khẩu
               </button>
-            </div>
-
-            <div className="text-sm text-center">
-              <Link href="/login" className="font-medium text-blue-600 hover:text-blue-500">
-                Quay lại đăng nhập
-              </Link>
             </div>
           </form>
         </div>

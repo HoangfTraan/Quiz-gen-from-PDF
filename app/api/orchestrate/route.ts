@@ -147,6 +147,17 @@ async function processDocument(documentId: string, accessToken: string, refreshT
         
         console.log(`[Orchestrate ${documentId}] Step 4: ${chunks?.length || 0} total chunks, processing ${chunksToProcess.length} (${questionsPerChunk} q/chunk, target ${questionCount}), qId=${qId}`);
         
+        // Fetch negative samples for the feedback loop to improve quality
+        const { data: badSamples } = await supabase
+            .from('questions')
+            .select('question_text')
+            .in('moderation_status', ['flagged', 'error'])
+            .limit(5);
+        
+        const negativeExamples = badSamples && badSamples.length > 0
+            ? "\n\nLƯU Ý QUAN TRỌNG (Tránh lặp lại các lỗi sau từ lịch sử):\n" + badSamples.map(q => `- TRÁNH: ${q.question_text}`).join('\n')
+            : "";
+
         let totalInserted = 0;
         if (chunksToProcess.length > 0 && qId) {
             for (let i = 0; i < chunksToProcess.length; i++) {
@@ -171,6 +182,7 @@ async function processDocument(documentId: string, accessToken: string, refreshT
 Yêu cầu:
 1. Các câu hỏi cần được phân bổ đa dạng dựa theo Thang đo Bloom (Bloom's Taxonomy) bao gồm nhiều cấp độ: Nhớ (Remember), Hiểu (Understand), Vận dụng (Apply), Phân tích (Analyze), Đánh giá (Evaluate), Sáng tạo (Create).
 2. Câu hỏi phải rõ nghĩa, không mơ hồ.
+${negativeExamples}
 TRẢ VỀ ĐÚNG ĐỊNH ĐẠNG JSON sau: 
 {
   "questions": [ 

@@ -255,7 +255,7 @@ export default function DocumentAnalysisPage({ params }: { params: Promise<{ id:
 
       {showCancelModal && (
         <div className={`fixed inset-0 z-50 flex items-center justify-center p-4 transition-opacity duration-200 ${modalClosing ? 'opacity-0' : 'opacity-100'}`}>
-          <div className="absolute inset-0 bg-gray-900/60 backdrop-blur-sm" onClick={closeCancelModal}></div>
+          <div className="absolute inset-0 bg-gray-900/60" onClick={closeCancelModal}></div>
           <div className={`relative bg-white p-8 rounded-3xl shadow-2xl max-w-sm w-full transition-transform duration-200 ${modalClosing ? 'scale-95 translate-y-4' : 'scale-100 translate-y-0'}`}>
             <div className="w-16 h-16 bg-red-100 text-red-600 rounded-full flex items-center justify-center mb-5 mx-auto">
               <AlertOctagon size={32} />

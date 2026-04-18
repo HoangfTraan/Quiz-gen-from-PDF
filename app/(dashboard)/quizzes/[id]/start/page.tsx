@@ -3,7 +3,7 @@
 import { useState, useEffect, use } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, Loader2, PlayCircle } from "lucide-react";
+import { ArrowLeft, Loader2, PlayCircle, RotateCcw } from "lucide-react";
 import { createClient } from "@/utils/supabase/client";
 
 export default function ExamPage({ params }: { params: Promise<{ id: string }> }) {
@@ -53,6 +53,14 @@ export default function ExamPage({ params }: { params: Promise<{ id: string }> }
 
   const handleSelect = (questionId: string, optionId: string) => {
     setSelectedAnswers(prev => ({ ...prev, [questionId]: optionId }));
+  };
+
+  const handleClear = (questionId: string) => {
+    setSelectedAnswers(prev => {
+      const next = { ...prev };
+      delete next[questionId];
+      return next;
+    });
   };
 
   const handleSubmit = async () => {
@@ -117,7 +125,7 @@ export default function ExamPage({ params }: { params: Promise<{ id: string }> }
   }
 
   return (
-    <div className="animate-slide-in-right max-w-4xl mx-auto px-4 pb-12">
+    <div className="animate-page-fade max-w-4xl mx-auto px-4 pb-12">
       <div className="flex items-center justify-between bg-white p-4 rounded-xl shadow sticky top-6 z-10 mb-8 border border-gray-100">
         <Link href={`/quizzes/${id}`} className="text-gray-500 hover:text-gray-800 font-medium shrink-0 flex items-center gap-2">
            <ArrowLeft size={16} /> Thoát
@@ -126,7 +134,7 @@ export default function ExamPage({ params }: { params: Promise<{ id: string }> }
            <PlayCircle className="text-orange-500" size={20} /> Đang làm bài thi
         </div>
         <div className="text-gray-500 text-sm font-medium shrink-0 bg-gray-50 px-3 py-1 rounded-full border border-gray-100">
-           Đã làm: <span className="font-bold text-blue-600">{Object.keys(selectedAnswers).length}</span><span className="text-gray-400">/{filteredQuestions.length}</span>
+           Đã làm: <span className="font-bold text-blue-600">{filteredQuestions.filter(q => selectedAnswers[q.id]).length}</span><span className="text-gray-400">/{filteredQuestions.length}</span>
         </div>
       </div>
 
@@ -166,7 +174,7 @@ export default function ExamPage({ params }: { params: Promise<{ id: string }> }
       ) : (
       <div className="space-y-8">
         {filteredQuestions.map((quiz, qIndex) => {
-          const selected = selectedAnswers[quiz.id];
+          const selectedId = selectedAnswers[quiz.id];
 
           // Sort options A, B, C, D stably
           const sortedOptions = quiz.question_options?.sort((a: any, b: any) => a.option_label.localeCompare(b.option_label));
@@ -180,7 +188,7 @@ export default function ExamPage({ params }: { params: Promise<{ id: string }> }
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                 {sortedOptions?.map((opt: any) => {
-                  const isSelected = selected === opt.id;
+                  const isSelected = selectedId === opt.id;
                   return (
                     <div
                       key={opt.id}
@@ -190,13 +198,25 @@ export default function ExamPage({ params }: { params: Promise<{ id: string }> }
                       }`}
                     >
                       <div className={`w-5 h-5 rounded-full border-[1.5px] flex items-center justify-center shrink-0 transition-colors ${isSelected ? 'border-blue-600 bg-white' : 'border-gray-400 bg-white'}`}>
-                        {isSelected && <div className="w-2.5 h-2.5 bg-blue-600 rounded-full animate-fade-in-blur" />}
+                        {isSelected && <div className="w-2.5 h-2.5 bg-blue-600 rounded-full animate-page-fade" />}
                       </div>
                       <span className="leading-relaxed font-medium"><span className="font-bold mr-1 opacity-70">{opt.option_label}.</span> {opt.option_text}</span>
                     </div>
                   )
                 })}
               </div>
+
+              {selectedId && (
+                <div className="flex justify-end mt-4">
+                  <button
+                    onClick={() => handleClear(quiz.id)}
+                    className="flex items-center gap-1.5 text-xs font-bold text-gray-400 hover:text-red-500 transition-colors shrink-0 bg-gray-50 hover:bg-red-50 px-3 py-2 rounded-lg border border-transparent hover:border-red-100 animate-page-fade"
+                    title="Xóa lựa chọn cho câu này"
+                  >
+                    <RotateCcw size={14} /> Xóa lựa chọn
+                  </button>
+                </div>
+              )}
             </div>
           );
         })}

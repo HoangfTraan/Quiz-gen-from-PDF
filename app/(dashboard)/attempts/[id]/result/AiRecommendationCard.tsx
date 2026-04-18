@@ -54,7 +54,7 @@ export default function AiRecommendationCard({ attemptId, hasWrongAnswers }: { a
             <div className="relative z-10 w-full">
                 <h2 className="text-2xl font-black text-purple-900 flex items-center gap-3 mb-6">
                     <Sparkles className="text-purple-600 animate-pulse" /> 
-                    Bác sĩ AI Chẩn đoán
+                    Chuẩn đoán
                 </h2>
                 
                 {loading ? (

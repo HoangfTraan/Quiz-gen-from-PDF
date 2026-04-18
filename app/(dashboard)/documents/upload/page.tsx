@@ -145,6 +145,7 @@ export default function DocumentUploadPage() {
           <input 
             type="text" 
             placeholder="Ví dụ: Bài giảng Sinh học kỳ 1" 
+            autoFocus={true}
             className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
             value={title}
             onChange={(e) => setTitle(e.target.value)}
