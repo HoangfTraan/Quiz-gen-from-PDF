@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef, use } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { ArrowLeft, CheckCircle, AlertOctagon, ArrowRight, XCircle, Sparkles } from "lucide-react";
+import { ArrowLeft, CheckCircle, AlertOctagon, ArrowRight, XCircle, Sparkles, Eye, Play } from "lucide-react";
 import { createClient } from "@/utils/supabase/client";
 
 
@@ -13,6 +13,8 @@ export default function DocumentAnalysisPage({ params }: { params: Promise<{ id:
   const documentId = resolvedParams.id;
   const searchParams = useSearchParams();
   const questionCount = parseInt(searchParams.get('questionCount') || '20', 10);
+  const bloomLevelsParam = searchParams.get('bloomLevels') || '';
+  const bloomLevels = bloomLevelsParam ? bloomLevelsParam.split(',') : [];
   const [status, setStatus] = useState<'processing' | 'success' | 'error'>('processing');
   const [errorText, setErrorText] = useState("");
   const [quizId, setQuizId] = useState<string | null>(null);
@@ -22,6 +24,10 @@ export default function DocumentAnalysisPage({ params }: { params: Promise<{ id:
   const [isCancelling, setIsCancelling] = useState(false);
   const [showCancelModal, setShowCancelModal] = useState(false);
   const [modalClosing, setModalClosing] = useState(false);
+  // true = teacher/admin có thể duyệt, false = user/learner chỉ xem
+  const [canReview, setCanReview] = useState(false);
+  // true = learner làm bài
+  const [canTake, setCanTake] = useState(false);
 
   // Use ref to prevent supabase from triggering effect re-runs
   const supabaseRef = useRef(createClient());
@@ -43,10 +49,28 @@ export default function DocumentAnalysisPage({ params }: { params: Promise<{ id:
     window.location.href = '/documents';
   };
 
+  // Kiểm tra role ngay khi mount — teacher/admin được duyệt đề, learner làm bài, còn lại chỉ xem
+  useEffect(() => {
+    async function checkRole() {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+      const { data: dbUser } = await supabase.from('users').select('role').eq('id', user.id).single();
+      if (dbUser?.role === 'admin') { setCanReview(true); return; }
+      const { data: userRoles } = await supabase
+        .from('user_roles').select('id, roles!inner(name)')
+        .eq('user_id', user.id);
+      
+      if (userRoles && userRoles.length > 0) {
+        const roleNames = userRoles.map((ur: any) => ur.roles?.name);
+        if (roleNames.includes('teacher')) setCanReview(true);
+        if (roleNames.includes('learner')) setCanTake(true);
+      }
+    }
+    checkRole();
+  }, [supabase]);
+
   // Guard against React Strict Mode double-execution
   const orchestrateCalledRef = useRef(false);
-
-  // Orchestration effect — runs once on mount only
   useEffect(() => {
     let mounted = true;
     let pollInterval: any;
@@ -71,7 +95,14 @@ export default function DocumentAnalysisPage({ params }: { params: Promise<{ id:
           const { data: qz } = await supabase.from('quizzes').select('id').eq('document_id', documentId).single();
           if (qz) {
             if (pollInterval) clearInterval(pollInterval);
-            router.push(`/quizzes/${qz.id}/review`);
+            // Redirect theo role: teacher/admin → review, learner → start, còn lại → xem bộ đề
+            if (canReview) {
+              router.push(`/quizzes/${qz.id}/review`);
+            } else if (canTake) {
+              router.push(`/quizzes/${qz.id}/start`);
+            } else {
+              router.push(`/quizzes/${qz.id}`);
+            }
             return;
           }
           if (orchestrateDone) {
@@ -155,7 +186,7 @@ export default function DocumentAnalysisPage({ params }: { params: Promise<{ id:
       fetch('/api/orchestrate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ documentId: documentId, questionCount: questionCount })
+        body: JSON.stringify({ documentId: documentId, questionCount: questionCount, bloomLevels: bloomLevels })
       }).then(() => {
         orchestrateDone = true;
         checkProgress();
@@ -244,11 +275,29 @@ export default function DocumentAnalysisPage({ params }: { params: Promise<{ id:
               <CheckCircle size={48} className="text-green-600" />
             </div>
             <h1 className="text-3xl font-extrabold text-gray-900 mb-3">Xong! Bộ đề đã sẵn sàng</h1>
-            <p className="text-gray-500 max-w-md mx-auto mb-8">Tri thức đã được chắt lọc tinh hoa! Bạn có thể bắt đầu làm bài kiểm tra hoặc xem lại bộ câu hỏi.</p>
 
-            <Link href={`/quizzes/${quizId}/review`} className="w-fit mx-auto bg-blue-600 hover:bg-blue-700 text-white px-8 py-4 rounded-xl font-bold shadow-lg shadow-blue-500/30 flex items-center gap-2 transform transition hover:scale-105">
-              Kiểm duyệt & Phê duyệt Đề <ArrowRight size={20} />
-            </Link>
+            {canReview ? (
+              <>
+                <p className="text-gray-500 max-w-md mx-auto mb-8">Tri thức đã được chắt lọc! Bạn có thể kiểm duyệt và phê duyệt bộ câu hỏi.</p>
+                <Link href={`/quizzes/${quizId}/review`} className="w-fit mx-auto bg-blue-600 hover:bg-blue-700 text-white px-8 py-4 rounded-xl font-bold shadow-lg shadow-blue-500/30 flex items-center gap-2 transform transition hover:scale-105">
+                  Kiểm duyệt &amp; Phê duyệt Đề <ArrowRight size={20} />
+                </Link>
+              </>
+            ) : canTake ? (
+              <>
+                <p className="text-gray-500 max-w-md mx-auto mb-8">Bộ đề đã được tạo thành công! Bạn có thể bắt đầu làm bài ngay.</p>
+                <Link href={`/quizzes/${quizId}/start`} className="w-fit mx-auto bg-blue-600 hover:bg-blue-700 text-white px-8 py-4 rounded-xl font-bold shadow-lg shadow-blue-500/30 flex items-center gap-2 transform transition hover:scale-105">
+                  <Play size={20} /> Bắt đầu làm bài
+                </Link>
+              </>
+            ) : (
+              <>
+                <p className="text-gray-500 max-w-md mx-auto mb-8">Bộ đề đã được tạo thành công! Bạn có thể xem lại nội dung các câu hỏi.</p>
+                <Link href={`/quizzes/${quizId}`} className="w-fit mx-auto bg-blue-600 hover:bg-blue-700 text-white px-8 py-4 rounded-xl font-bold shadow-lg shadow-blue-500/30 flex items-center gap-2 transform transition hover:scale-105">
+                  <Eye size={20} /> Xem bộ đề
+                </Link>
+              </>
+            )}
           </div>
         )}
       </div>

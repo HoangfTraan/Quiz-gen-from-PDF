@@ -52,14 +52,16 @@ export async function signup(formData: FormData) {
     redirect("/register?error=" + encodeURIComponent("Đăng ký thất bại: " + error.message));
   }
   
-  // Create user record in public.users if auth is successful
+  // Tạo bản ghi trong public.users — mọi tài khoản mới đều là 'user' mặc định.
+  // Chỉ admin mới được nâng quyền lên teacher/learner qua trang /admin/users.
   if (authData.user) {
-     const { error: dbError } = await supabase.from('users').insert({
-       id: authData.user.id,
-       full_name: data.options.data.full_name,
-       email: data.email,
-     });
-     if (dbError) console.error("Error creating public.user:", dbError.message);
+    const { error: dbError } = await supabase.from('users').insert({
+      id: authData.user.id,
+      full_name: data.options.data.full_name,
+      email: data.email,
+      role: 'user', // Mặc định — admin thay đổi qua bảng user_roles
+    });
+    if (dbError) console.error("Error creating public.user:", dbError.message);
   }
 
   revalidatePath("/", "layout");

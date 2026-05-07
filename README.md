@@ -23,7 +23,7 @@ Dự án tập trung vào việc tối ưu hóa quy trình ôn tập và đánh 
 *   **Xác thực và Lưu trữ:** Supabase Auth & Supabase Storage.
 *   **AI Engine (Trình xử lý AI):** 
     *   **Google Gemini AI:** Xử lý phân tích văn bản và sinh câu hỏi chính.
-    *   **Kyma (OpenAI-compatible):** Hệ thống dự phòng (fallback) và phân phối tải. (Round Robin).
+    *   **Cloud AI (OpenAI-compatible):** Hỗ trợ Mistral AI, Kyma, OpenAI, v.v. — Hệ thống dự phòng (fallback) và phân phối tải (Round Robin).
 *   **Thư viện biểu tượng:** Lucide React.
 *   **Quản lý mã nguồn:** Git & GitHub.
 
@@ -45,8 +45,9 @@ Dự án tập trung vào việc tối ưu hóa quy trình ôn tập và đánh 
     NEXT_PUBLIC_SUPABASE_URL=your_supabase_url
     NEXT_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
     GEMINI_API_KEY=your_gemini_key
-    OPENAI_API_KEY=your_kyma_key
-    KYMA_AI_MODEL=gemini-3-flash # Tên model của Kyma
+    AI_API_KEY=your_api_key          # API key của provider (Mistral, Kyma, OpenAI, v.v.)
+    AI_BASE_URL=https://api.mistral.ai/v1  # Base URL của provider
+    AI_MODEL=mistral-small-latest    # Tên model sử dụng
 
     # Cấu hình Local AI (Tùy chọn - nếu dùng LM Studio/Ollama)
     USE_LOCAL_AI=false # Chuyển thành true để bỏ qua Cloud AI

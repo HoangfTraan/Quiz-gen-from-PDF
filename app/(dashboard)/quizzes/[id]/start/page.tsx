@@ -3,7 +3,7 @@
 import { useState, useEffect, use } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, Loader2, PlayCircle, RotateCcw } from "lucide-react";
+import { ArrowLeft, Loader2, PlayCircle, RotateCcw, ShieldOff } from "lucide-react";
 import { createClient } from "@/utils/supabase/client";
 
 export default function ExamPage({ params }: { params: Promise<{ id: string }> }) {
@@ -14,6 +14,7 @@ export default function ExamPage({ params }: { params: Promise<{ id: string }> }
   const [questions, setQuestions] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
+  const [hasAccess, setHasAccess] = useState<boolean | null>(null);
   const [selectedAnswers, setSelectedAnswers] = useState<Record<string, string>>({}); // question_id -> option_id
   const [filter, setFilter] = useState("all");
 
@@ -34,21 +35,31 @@ export default function ExamPage({ params }: { params: Promise<{ id: string }> }
   const uniqueDifficulties = Array.from(new Set(questions.map((q: any) => parseExplanation(q.explanation).diff).filter(Boolean)));
 
   useEffect(() => {
-    async function loadQuestions() {
-      const { data } = await supabase
-        .from('questions')
-        .select(`
-          id,
-          question_text,
-          explanation,
-          question_options (id, option_label, option_text, is_correct)
-        `)
-        .eq('quiz_id', id);
+    async function init() {
+      // 1. Check role: chỉ learner mới được làm bài
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) { setHasAccess(false); setLoading(false); return; }
 
-      if (data) setQuestions(data);
+      const { data: learnerRole } = await supabase
+        .from('user_roles')
+        .select('id, roles!inner(name)')
+        .eq('user_id', user.id)
+        .eq('roles.name', 'learner')
+        .maybeSingle();
+      setHasAccess(!!learnerRole);
+
+      // 2. Load questions (chỉ cần load nếu có quyền)
+      if (learnerRole) {
+        const { data } = await supabase
+          .from('questions')
+          .select(`id, question_text, explanation,
+            question_options (id, option_label, option_text, is_correct)`)
+          .eq('quiz_id', id);
+        if (data) setQuestions(data);
+      }
       setLoading(false);
     }
-    loadQuestions();
+    init();
   }, [id, supabase]);
 
   const handleSelect = (questionId: string, optionId: string) => {
@@ -114,6 +125,23 @@ export default function ExamPage({ params }: { params: Promise<{ id: string }> }
   };
 
   if (loading) return <div className="flex justify-center mt-20"><Loader2 className="animate-spin text-blue-600" size={40} /></div>;
+
+  // Chặn truy cập nếu không phải learner
+  if (hasAccess === false) {
+    return (
+      <div className="max-w-lg mx-auto mt-20 p-10 bg-white rounded-2xl border border-amber-100 shadow text-center">
+        <ShieldOff size={48} className="text-amber-400 mx-auto mb-4" />
+        <h2 className="text-xl font-extrabold text-gray-800 mb-2">Không có quyền làm bài</h2>
+        <p className="text-gray-500 mb-6">
+          Tính năng làm bài chỉ dành cho tài khoản có vai trò <strong>Người học</strong>.<br/>
+          Liên hệ admin để được cấp quyền.
+        </p>
+        <Link href="/quizzes" className="px-6 py-2.5 bg-blue-600 text-white font-bold rounded-xl hover:bg-blue-700 transition-colors">
+          Về Bộ câu hỏi
+        </Link>
+      </div>
+    );
+  }
 
   if (questions.length === 0) {
     return (

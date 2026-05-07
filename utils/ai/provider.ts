@@ -1,8 +1,14 @@
 /**
  * Dual AI Provider — Round-Robin + Auto-Fallback
  * 
- * Phân phối lưu lượng 50/50 giữa Kyma (OpenAI-compatible) và Gemini.
+ * Phân phối lưu lượng 50/50 giữa Cloud AI (OpenAI-compatible) và Gemini.
  * Nếu provider được chọn lỗi → tự động fallback sang provider còn lại.
+ * 
+ * Biến môi trường cần thiết:
+ *   AI_API_KEY    – API key cho provider OpenAI-compatible (Mistral, Kyma, OpenAI, v.v.)
+ *   AI_BASE_URL   – Base URL của provider (mặc định: https://api.mistral.ai/v1)
+ *   AI_MODEL      – Tên model sử dụng (mặc định: mistral-small-latest)
+ *   GEMINI_API_KEY – API key cho Google Gemini
  */
 
 import OpenAI from 'openai';
@@ -11,7 +17,7 @@ import { GoogleGenerativeAI } from '@google/generative-ai';
 // ==========================================
 // PROVIDER TYPES
 // ==========================================
-type ProviderName = 'Kyma' | 'Gemini' | 'LocalAI';
+type ProviderName = 'CloudAI' | 'Gemini' | 'LocalAI';
 type OutputMode = 'json' | 'text';
 
 interface AIResult {
@@ -31,12 +37,12 @@ let callCounter = 0;
 // ==========================================
 // LAZY INIT — tránh crash khi thiếu key
 // ==========================================
-function getKymaClient(): OpenAI | null {
-  const key = process.env.OPENAI_API_KEY;
+function getCloudAIClient(): OpenAI | null {
+  const key = process.env.AI_API_KEY;
   if (!key) return null;
   return new OpenAI({
     apiKey: key,
-    baseURL: 'https://kymaapi.com/v1',
+    baseURL: process.env.AI_BASE_URL || 'https://api.mistral.ai/v1',
   });
 }
 
@@ -62,18 +68,18 @@ function getLocalAiClient(): OpenAI | null {
 // INDIVIDUAL PROVIDER CALLS
 // ==========================================
 
-async function callKyma(
+async function callCloudAI(
   prompt: string,
   systemPrompt: string,
   mode: OutputMode
 ): Promise<string> {
-  const client = getKymaClient();
-  if (!client) throw new Error('[AI] Missing OPENAI_API_KEY (Kyma)');
+  const client = getCloudAIClient();
+  if (!client) throw new Error('[AI] Missing AI_API_KEY');
 
-  const kymaModel = process.env.KYMA_AI_MODEL || 'gemma-4-31b';
+  const modelName = process.env.AI_MODEL || 'mistral-small-latest';
 
   const completion = await client.chat.completions.create({
-    model: kymaModel,
+    model: modelName,
     messages: [
       { role: 'system', content: systemPrompt },
       { role: 'user', content: prompt },
@@ -84,7 +90,7 @@ async function callKyma(
   });
 
   const text = completion.choices[0]?.message?.content;
-  if (!text) throw new Error('[AI/Kyma] Empty response');
+  if (!text) throw new Error('[AI/CloudAI] Empty response');
   return text;
 }
 
@@ -147,12 +153,12 @@ const providers: Record<
   ProviderName,
   (prompt: string, systemPrompt: string, mode: OutputMode) => Promise<string>
 > = {
-  Kyma: callKyma,
+  CloudAI: callCloudAI,
   Gemini: callGemini,
   LocalAI: callLocalAI,
 };
 
-const providerOrder: ProviderName[] = ['Kyma', 'Gemini'];
+const providerOrder: ProviderName[] = ['CloudAI', 'Gemini'];
 
 // ==========================================
 // CORE: ROUND-ROBIN + FALLBACK
@@ -203,7 +209,7 @@ async function callWithFallback(
       `[AI] Both providers failed. Last error: ${fallbackErr.message}`
     );
     throw new Error(
-      `Cả hai AI provider đều thất bại. Kyma & Gemini không phản hồi.`
+      `Cả hai AI provider đều thất bại. CloudAI & Gemini không phản hồi.`
     );
   }
 }
@@ -214,7 +220,7 @@ async function callWithFallback(
 
 /**
  * Gọi AI và trả về JSON object đã parse.
- * Round-robin giữa Kyma (DeepSeek) & Gemini, fallback tự động.
+ * Round-robin giữa CloudAI & Gemini, fallback tự động.
  */
 export async function generateJSON<T = any>(
   prompt: string,
@@ -254,7 +260,7 @@ export async function generateJSON<T = any>(
 
 /**
  * Gọi AI và trả về plain text (markdown, html, etc.).
- * Round-robin giữa Kyma (DeepSeek) & Gemini, fallback tự động.
+ * Round-robin giữa CloudAI & Gemini, fallback tự động.
  */
 export async function generateText(
   prompt: string,

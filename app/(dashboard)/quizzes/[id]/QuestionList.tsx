@@ -6,7 +6,7 @@ import { createClient } from "@/utils/supabase/client";
 import { useRouter } from "next/navigation";
 import ConfirmModal from "@/components/ConfirmModal";
 
-export default function QuestionList({ initialQuestions, quizId }: { initialQuestions: any[], quizId: string }) {
+export default function QuestionList({ initialQuestions, quizId, canEdit = true }: { initialQuestions: any[], quizId: string, canEdit?: boolean }) {
   const [questions, setQuestions] = useState(initialQuestions || []);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
@@ -376,21 +376,26 @@ export default function QuestionList({ initialQuestions, quizId }: { initialQues
 
         return (
           <div key={q.id} className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 relative group transition-all hover:border-blue-200 hover:shadow-md">
+            {/* Nút sửa/xóa: chỉ hiện cho teacher/admin */}
             <div className="absolute top-4 right-4 opacity-0 group-hover:opacity-100 transition-opacity flex gap-2">
-              <button
-                onClick={() => handleEdit(q)}
-                className="p-2 text-gray-400 hover:text-blue-600 bg-gray-50 hover:bg-blue-50 rounded-lg transition-colors"
-                title="Sửa câu hỏi"
-              >
-                <Edit3 size={18} />
-              </button>
-              <button
-                onClick={(e) => handleDelete(q.id, e)}
-                className="p-2 text-gray-400 hover:text-red-600 bg-gray-50 hover:bg-red-50 rounded-lg transition-colors"
-                title="Xóa câu hỏi"
-              >
-                <Trash2 size={18} />
-              </button>
+              {canEdit && (
+                <>
+                  <button
+                    onClick={() => handleEdit(q)}
+                    className="p-2 text-gray-400 hover:text-blue-600 bg-gray-50 hover:bg-blue-50 rounded-lg transition-colors"
+                    title="Sửa câu hỏi"
+                  >
+                    <Edit3 size={18} />
+                  </button>
+                  <button
+                    onClick={(e) => handleDelete(q.id, e)}
+                    className="p-2 text-gray-400 hover:text-red-600 bg-gray-50 hover:bg-red-50 rounded-lg transition-colors"
+                    title="Xóa câu hỏi"
+                  >
+                    <Trash2 size={18} />
+                  </button>
+                </>
+              )}
             </div>
 
             <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-2 mb-5 pr-20">
@@ -606,7 +611,8 @@ export default function QuestionList({ initialQuestions, quizId }: { initialQues
         </div>
       )}
 
-      {editingId !== "new" && (
+      {/* Nút thêm câu hỏi: chỉ teacher/admin */}
+      {canEdit && editingId !== "new" && (
         <button
           onClick={handleAdd}
           className="w-full py-4 bg-gray-50 hover:bg-blue-50 border border-dashed border-gray-300 hover:border-blue-300 rounded-xl font-medium text-gray-600 hover:text-blue-600 transition-colors flex justify-center items-center gap-2"

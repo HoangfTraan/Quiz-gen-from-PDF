@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { 
@@ -11,18 +11,56 @@ import {
   PanelLeftClose, 
   Menu, 
   ShieldCheck,
-  LayoutDashboard
+  LayoutDashboard,
+  LogOut,
+  User as UserIcon,
 } from "lucide-react";
+import { createClient } from "@/utils/supabase/client";
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+  const [userName, setUserName] = useState("Admin");
+  const [userInitial, setUserInitial] = useState("A");
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
   const pathname = usePathname();
+  const supabase = createClient();
+
+  useEffect(() => {
+    const fetchUser = async () => {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (!user) return;
+
+      const { data: dbUser } = await supabase
+        .from("users")
+        .select("full_name, avatar")
+        .eq("id", user.id)
+        .single();
+
+      if (dbUser?.full_name) {
+        setUserName(dbUser.full_name);
+        setUserInitial(dbUser.full_name.charAt(0).toUpperCase());
+      } else if (user.email) {
+        setUserName(user.email);
+        setUserInitial(user.email.charAt(0).toUpperCase());
+      }
+      if (dbUser?.avatar) setAvatarUrl(dbUser.avatar);
+    };
+    fetchUser();
+  }, [supabase]);
+
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
+    window.location.href = "/login";
+  };
 
   const navigation = [
     { name: "Tổng quan", href: "/admin", icon: LayoutDashboard },
     { name: "Người dùng", href: "/admin/users", icon: Users },
     { name: "Tài liệu", href: "/admin/documents", icon: Files },
     { name: "Câu hỏi", href: "/admin/questions", icon: HelpCircle },
+    { name: "Hồ sơ", href: "/admin/profile", icon: UserIcon },
     // { name: "Tiến trình AI", href: "/admin/ai-jobs", icon: Activity },
   ];
 
@@ -69,11 +107,43 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
               );
             })}
           </nav>
-          
+
           <div className="p-4 border-t border-gray-800">
-             <Link href="/dashboard" className="block text-center text-sm text-gray-400 hover:text-white py-2 rounded-lg border border-gray-700 hover:bg-gray-800">
-               Trang Người dùng
-             </Link>
+            {/* User info + role badge */}
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-full bg-blue-950 flex items-center justify-center text-blue-400 font-bold shrink-0 overflow-hidden border border-blue-800 shadow-sm">
+                {avatarUrl ? (
+                  <img
+                    src={avatarUrl}
+                    alt="Avatar"
+                    className="w-full h-full object-cover"
+                  />
+                ) : (
+                  userInitial
+                )}
+              </div>
+              <div className="overflow-hidden flex-1">
+                <p
+                  className="font-semibold text-sm text-gray-200 truncate"
+                  title={userName}
+                >
+                  {userName}
+                </p>
+                {/* Role badge */}
+                <span
+                  className="inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full border bg-purple-900/30 border-purple-500/30 text-purple-300 mt-0.5"
+                >
+                  <ShieldCheck size={10} />
+                  Admin
+                </span>
+                <button
+                  onClick={handleLogout}
+                  className="text-xs text-red-400 hover:text-red-300 flex items-center gap-1 mt-1.5 hover:underline"
+                >
+                  <LogOut size={12} /> Đăng xuất
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       </aside>

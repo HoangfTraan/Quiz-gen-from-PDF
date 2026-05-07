@@ -4,7 +4,7 @@ import { createClient as createStaticClient } from '@supabase/supabase-js';
 import { generateJSON } from '@/utils/ai/provider';
 import pdfParse from 'pdf-parse';
 
-async function processDocument(documentId: string, accessToken: string, refreshToken: string, questionCount: number = 20) {
+async function processDocument(documentId: string, accessToken: string, refreshToken: string, questionCount: number = 20, bloomLevels: string[] = []) {
     // Khởi tạo Supabase client có khả năng tự động refresh token trong memory
     const supabase = createStaticClient(
         process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -178,9 +178,12 @@ async function processDocument(documentId: string, accessToken: string, refreshT
                     try {
                         const remaining = questionCount - totalInserted;
                         const qPerThisChunk = Math.min(questionsPerChunk, remaining);
+                        const bloomInstruction = bloomLevels.length > 0
+                          ? `1. TẤT CẢ câu hỏi PHẢI thuộc các cấp độ Bloom sau: ${bloomLevels.join(', ')}. KHÔNG ĐƯỢC tạo câu hỏi ở cấp độ khác.`
+                          : `1. Các câu hỏi cần được phân bổ đa dạng dựa theo Thang đo Bloom (Bloom's Taxonomy) bao gồm nhiều cấp độ: Nhớ (Remember), Hiểu (Understand), Vận dụng (Apply), Phân tích (Analyze), Đánh giá (Evaluate), Sáng tạo (Create).`;
                         const prompt = `Nhiệm vụ: Đọc kỹ đoạn nội dung sau và tạo ra ${qPerThisChunk} câu hỏi trắc nghiệm bám sát kiến thức trong bài.
 Yêu cầu:
-1. Các câu hỏi cần được phân bổ đa dạng dựa theo Thang đo Bloom (Bloom's Taxonomy) bao gồm nhiều cấp độ: Nhớ (Remember), Hiểu (Understand), Vận dụng (Apply), Phân tích (Analyze), Đánh giá (Evaluate), Sáng tạo (Create).
+${bloomInstruction}
 2. Câu hỏi phải rõ nghĩa, không mơ hồ.
 ${negativeExamples}
 TRẢ VỀ ĐÚNG ĐỊNH ĐẠNG JSON sau: 
@@ -220,6 +223,10 @@ ${chunksToProcess[i].content}
                            let diff = q.difficulty;
                            if (!diff || !BLOOM_LEVELS.some(l => diff.includes(l))) {
                               diff = guessBloomLevel(q.question_text, q.explanation || "");
+                           }
+                           // Nếu có bloom filter, ép difficulty vào cấp độ được chọn
+                           if (bloomLevels.length > 0 && !bloomLevels.includes(diff)) {
+                              diff = bloomLevels[Math.floor(Math.random() * bloomLevels.length)];
                            }
                            const difficultyTag = `[MỨC ĐỘ: ${diff.toUpperCase()}] `;
 
@@ -292,7 +299,7 @@ ${chunksToProcess[i].content}
 }
 
 export async function POST(request: Request) {
-    const { documentId, questionCount } = await request.json();
+    const { documentId, questionCount, bloomLevels } = await request.json();
     if (!documentId) return NextResponse.json({ error: 'Missing documentId' }, { status: 400 });
     
     const targetQuestions = Math.max(5, Math.min(200, parseInt(questionCount) || 20));
@@ -312,7 +319,9 @@ export async function POST(request: Request) {
     const token = sessionData.session?.access_token || '';
     const refreshToken = sessionData.session?.refresh_token || '';
 
-    await processDocument(documentId, token, refreshToken, targetQuestions);
+    const validBloomLevels: string[] = Array.isArray(bloomLevels) ? bloomLevels : [];
+
+    await processDocument(documentId, token, refreshToken, targetQuestions, validBloomLevels);
 
     return NextResponse.json({ success: true, message: 'Orchestration fully completed' });
 }

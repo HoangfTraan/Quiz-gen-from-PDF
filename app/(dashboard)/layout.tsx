@@ -2,65 +2,111 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
-import { 
-  BookOpen, 
-  History, 
-  PlusCircle, 
-  PanelLeftClose, 
-  Menu, 
+import { usePathname, useSearchParams } from "next/navigation";
+import {
+  BookOpen,
+  History,
+  PlusCircle,
+  PanelLeftClose,
+  Menu,
   LayoutDashboard,
   Files,
   User as UserIcon,
   LogOut,
-  ShieldCheck
+  ShieldCheck,
+  GraduationCap,
+  BookMarked,
 } from "lucide-react";
 import { createClient } from "@/utils/supabase/client";
+import type { AppRole } from "@/utils/rbac";
+import { getRoleLabel, getRoleBadgeClass } from "@/utils/rbac";
 
-export default function DashboardLayout({ children }: { children: React.ReactNode }) {
+export default function DashboardLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [userName, setUserName] = useState("Người dùng");
   const [userInitial, setUserInitial] = useState("U");
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
-  const [isAdmin, setIsAdmin] = useState(false);
+  const [userRole, setUserRole] = useState<AppRole>("user");
   const pathname = usePathname();
+  const searchParams = useSearchParams();
   const supabase = createClient();
 
   useEffect(() => {
     const fetchUser = async () => {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (user) {
-        const { data: dbUser } = await supabase.from('users').select('full_name, role, avatar').eq('id', user.id).single();
-        if (dbUser?.full_name) {
-           setUserName(dbUser.full_name);
-           setUserInitial(dbUser.full_name.charAt(0).toUpperCase());
-        } else if (user.email) {
-           setUserName(user.email);
-           setUserInitial(user.email.charAt(0).toUpperCase());
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (!user) return;
+
+      // Lấy thông tin cơ bản
+      const { data: dbUser } = await supabase
+        .from("users")
+        .select("full_name, role, avatar")
+        .eq("id", user.id)
+        .single();
+
+      if (dbUser?.full_name) {
+        setUserName(dbUser.full_name);
+        setUserInitial(dbUser.full_name.charAt(0).toUpperCase());
+      } else if (user.email) {
+        setUserName(user.email);
+        setUserInitial(user.email.charAt(0).toUpperCase());
+      }
+      if (dbUser?.avatar) setAvatarUrl(dbUser.avatar);
+
+      // Xác định role: admin > teacher/learner từ user_roles > user
+      if (dbUser?.role === "admin") {
+        setUserRole("admin");
+        return;
+      }
+
+      const { data: userRoles } = await supabase
+        .from("user_roles")
+        .select("roles(name)")
+        .eq("user_id", user.id);
+
+      if (userRoles && userRoles.length > 0) {
+        const roleNames = userRoles
+          .map((ur: any) => {
+            const roleObj = Array.isArray(ur.roles) ? ur.roles[0] : ur.roles;
+            return roleObj?.name;
+          })
+          .filter(Boolean) as string[];
+        if (roleNames.includes("teacher")) {
+          setUserRole("teacher");
+          return;
         }
-        if (dbUser?.avatar) {
-           setAvatarUrl(dbUser.avatar);
-        }
-        if (dbUser?.role === 'admin') {
-           setIsAdmin(true);
+        if (roleNames.includes("learner")) {
+          setUserRole("learner");
+          return;
         }
       }
+
+      setUserRole("user");
     };
     fetchUser();
   }, [supabase]);
 
   const handleLogout = async () => {
     await supabase.auth.signOut();
-    window.location.href = '/login';
+    window.location.href = "/login";
   };
 
+  // Menu điều hướng — ẩn "Lịch sử thi" nếu không phải learner
   const navigation = [
-    { name: "Tổng quan", href: "/dashboard", icon: LayoutDashboard },
-    { name: "Tài liệu của tôi", href: "/documents", icon: Files },
-    { name: "Bộ câu hỏi", href: "/quizzes", icon: BookOpen },
-    { name: "Lịch sử thi", href: "/history", icon: History },
-    { name: "Hồ sơ", href: "/profile", icon: UserIcon },
-  ];
+    { name: "Tổng quan", href: "/dashboard", icon: LayoutDashboard, roles: ["admin", "teacher", "learner", "user"] },
+    { name: "Tài liệu của tôi", href: "/documents", icon: Files, roles: ["admin", "teacher", "learner", "user"] },
+    { name: "Bộ câu hỏi", href: "/quizzes", icon: BookOpen, roles: ["admin", "teacher", "learner", "user"] },
+    { name: "Lịch sử thi", href: "/history", icon: History, roles: ["learner"] },
+    { name: "Hồ sơ", href: "/profile", icon: UserIcon, roles: ["admin", "teacher", "learner", "user"] },
+  ].filter((item) => item.roles.includes(userRole));
+
+  // Thông báo lỗi khi bị chặn route
+  const routeError = searchParams.get("error");
 
   return (
     <div className="flex h-screen overflow-hidden bg-gray-50 font-sans text-gray-800">
@@ -79,7 +125,10 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           </button>
 
           <div className="p-5 border-b border-gray-100 pr-14">
-            <Link href="/" className="text-xl font-extrabold text-blue-700 block mb-6 leading-snug">
+            <Link
+              href="/"
+              className="text-xl font-extrabold text-blue-700 block mb-6 leading-snug"
+            >
               QuizGen
             </Link>
             <Link
@@ -92,7 +141,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
           <nav className="flex-1 overflow-y-auto p-4 space-y-2">
             {navigation.map((item) => {
-              const isActive = pathname === item.href || pathname?.startsWith(item.href + "/");
+              const isActive =
+                pathname === item.href ||
+                pathname?.startsWith(item.href + "/");
               return (
                 <Link
                   key={item.name}
@@ -103,30 +154,58 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                       : "text-gray-600 hover:bg-gray-100 hover:text-gray-900"
                   }`}
                 >
-                  <item.icon size={20} className={isActive ? "text-blue-600" : "text-gray-500"} />
+                  <item.icon
+                    size={20}
+                    className={isActive ? "text-blue-600" : "text-gray-500"}
+                  />
                   {item.name}
                 </Link>
               );
             })}
           </nav>
-          
+
           <div className="p-4 border-t border-gray-100">
-            {isAdmin && (
-              <Link href="/admin" className="flex items-center gap-2 mb-3 px-3 py-2 bg-purple-50 text-purple-700 hover:bg-purple-100 rounded-lg text-sm font-bold transition-colors">
+            {userRole === "admin" && (
+              <Link
+                href="/admin"
+                className="flex items-center gap-2 mb-3 px-3 py-2 bg-purple-50 text-purple-700 hover:bg-purple-100 rounded-lg text-sm font-bold transition-colors"
+              >
                 <ShieldCheck size={16} /> Vào trang Quản trị
               </Link>
             )}
+
+            {/* User info + role badge */}
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center text-blue-600 font-bold shrink-0 overflow-hidden border border-gray-100 shadow-sm">
                 {avatarUrl ? (
-                  <img src={avatarUrl} alt="Avatar" className="w-full h-full object-cover" />
+                  <img
+                    src={avatarUrl}
+                    alt="Avatar"
+                    className="w-full h-full object-cover"
+                  />
                 ) : (
                   userInitial
                 )}
               </div>
               <div className="overflow-hidden flex-1">
-                <p className="font-semibold text-sm truncate" title={userName}>{userName}</p>
-                <button onClick={handleLogout} className="text-xs text-red-500 hover:underline flex items-center gap-1 mt-0.5">
+                <p
+                  className="font-semibold text-sm truncate"
+                  title={userName}
+                >
+                  {userName}
+                </p>
+                {/* Role badge */}
+                <span
+                  className={`inline-flex items-center gap-1 text-xs font-semibold px-2 py-0.5 rounded-full border mt-0.5 ${getRoleBadgeClass(userRole)}`}
+                >
+                  {userRole === "teacher" && <BookMarked size={10} />}
+                  {userRole === "learner" && <GraduationCap size={10} />}
+                  {getRoleLabel(userRole)}
+                </span>
+                <button
+                  onClick={handleLogout}
+                  className="text-xs text-red-500 hover:underline flex items-center gap-1 mt-1"
+                >
                   <LogOut size={12} /> Đăng xuất
                 </button>
               </div>
@@ -135,7 +214,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         </div>
       </aside>
 
-      {/* Nút Hamburger Mở Sidebar (Nổi góc trái) */}
+      {/* Nút Hamburger */}
       {!isSidebarOpen && (
         <button
           onClick={() => setIsSidebarOpen(true)}
@@ -148,6 +227,14 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       {/* MAIN CONTENT AREA */}
       <main className="flex-1 p-6 relative overflow-y-auto h-full">
         <div className="max-w-6xl mx-auto">
+          {/* Banner thông báo nếu bị chặn route */}
+          {routeError === "learner_only" && (
+            <div className="mb-4 p-4 bg-amber-50 border border-amber-200 rounded-xl text-amber-800 text-sm font-medium flex items-center gap-2">
+              <GraduationCap size={18} className="text-amber-600 shrink-0" />
+              Tính năng này chỉ dành cho <strong>Người học</strong>. Liên hệ
+              admin để được cấp quyền.
+            </div>
+          )}
           {children}
         </div>
       </main>

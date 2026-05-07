@@ -10,6 +10,7 @@ export default function DocumentUploadPage() {
   const [title, setTitle] = useState("");
   const [subjectName, setSubjectName] = useState("");
   const [questionCount, setQuestionCount] = useState(20);
+  const [bloomLevels, setBloomLevels] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
   const [errorText, setErrorText] = useState("");
   const [isDragging, setIsDragging] = useState(false);
@@ -109,7 +110,8 @@ export default function DocumentUploadPage() {
 
       if (dbError) throw new Error("Lỗi lưu DB: " + dbError.message);
 
-      router.push(`/documents/${docData.id}/analysis?questionCount=${questionCount}`);
+      const bloomParam = bloomLevels.length > 0 ? `&bloomLevels=${encodeURIComponent(bloomLevels.join(','))}` : '';
+      router.push(`/documents/${docData.id}/analysis?questionCount=${questionCount}${bloomParam}`);
     } catch (err: any) {
       setErrorText(err.message || "Đã có lỗi xảy ra");
       setLoading(false);
@@ -182,6 +184,41 @@ export default function DocumentUploadPage() {
             ))}
           </div>
           <p className="text-xs text-gray-400 mt-2">Số lượng thực tế có thể chênh lệch nhẹ tùy vào độ dài tài liệu.</p>
+        </div>
+
+        <div className="mb-6">
+          <label className="block text-sm font-medium text-gray-700 mb-2">Cấp độ Bloom Taxonomy</label>
+          <div className="grid grid-cols-3 sm:grid-cols-6 gap-2">
+            {(["Nhớ", "Hiểu", "Vận dụng", "Phân tích", "Đánh giá", "Sáng tạo"] as const).map(level => {
+              const isSelected = bloomLevels.includes(level);
+              return (
+                <button
+                  key={level}
+                  type="button"
+                  onClick={() => {
+                    setBloomLevels(prev =>
+                      prev.includes(level)
+                        ? prev.filter(l => l !== level)
+                        : [...prev, level]
+                    );
+                  }}
+                  className={`py-2.5 rounded-lg font-bold text-xs border-2 transition-all ${
+                    isSelected
+                      ? 'bg-indigo-600 text-white border-indigo-600 shadow-lg shadow-indigo-500/30 scale-105'
+                      : 'bg-white text-gray-600 border-gray-200 hover:border-indigo-300 hover:text-indigo-600'
+                  }`}
+                >
+                  {level}
+                </button>
+              );
+            })}
+          </div>
+          <p className="text-xs text-gray-400 mt-2">
+            {bloomLevels.length === 0
+              ? "Chưa chọn → AI sẽ tự phân bổ đa dạng tất cả cấp độ."
+              : `Đã chọn ${bloomLevels.length} cấp độ: ${bloomLevels.join(', ')}`
+            }
+          </p>
         </div>
 
         <div className="w-full p-8 border-2 border-dashed border-blue-200 bg-blue-50 rounded-lg hover:border-blue-400 hover:bg-blue-100 transition-all group mb-8 flex flex-col items-center justify-center relative">

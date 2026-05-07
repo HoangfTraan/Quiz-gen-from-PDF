@@ -2,7 +2,7 @@
 
 import { useEffect, useState, use } from "react";
 import { createClient } from "@/utils/supabase/client";
-import { ArrowLeft, CheckCircle2, XCircle, Save, Loader2, ListChecks } from "lucide-react";
+import { ArrowLeft, CheckCircle2, XCircle, Save, Loader2, ListChecks, ShieldOff } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 
@@ -12,6 +12,7 @@ export default function ReviewQuestionsPage({ params }: { params: Promise<{ id: 
   const [rejectedIds, setRejectedIds] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [hasAccess, setHasAccess] = useState<boolean | null>(null);
   const router = useRouter();
   const supabase = createClient();
 
@@ -25,24 +26,36 @@ export default function ReviewQuestionsPage({ params }: { params: Promise<{ id: 
   };
 
   useEffect(() => {
-    async function fetchQuestions() {
-      const { data, error } = await supabase
-        .from('questions')
-        .select(`
-           id,
-           question_text,
-           explanation,
-           difficulty,
-           question_options (id, option_label, option_text, is_correct)
-         `)
-        .eq('quiz_id', id);
+    async function init() {
+      // 1. Check role
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) { setHasAccess(false); setLoading(false); return; }
 
-      if (data) {
-        setQuestions(data);
+      // Admin check qua cột users.role
+      const { data: dbUser } = await supabase
+        .from('users').select('role').eq('id', user.id).single();
+      if (dbUser?.role === 'admin') { setHasAccess(true); }
+      else {
+        // Teacher check qua user_roles
+        const { data: teacherRole } = await supabase
+          .from('user_roles')
+          .select('id, roles!inner(name)')
+          .eq('user_id', user.id)
+          .eq('roles.name', 'teacher')
+          .maybeSingle();
+        setHasAccess(!!teacherRole);
       }
+
+      // 2. Load questions
+      const { data } = await supabase
+        .from('questions')
+        .select(`id, question_text, explanation, difficulty,
+           question_options (id, option_label, option_text, is_correct)`)
+        .eq('quiz_id', id);
+      if (data) setQuestions(data);
       setLoading(false);
     }
-    fetchQuestions();
+    init();
   }, [id, supabase]);
 
   const toggleReject = (id: string) => {
@@ -73,6 +86,20 @@ export default function ReviewQuestionsPage({ params }: { params: Promise<{ id: 
   };
 
   if (loading) return <div className="flex justify-center mt-20"><Loader2 className="animate-spin text-blue-600" size={40} /></div>;
+
+  // Chặn truy cập nếu không phải teacher/admin
+  if (hasAccess === false) {
+    return (
+      <div className="max-w-lg mx-auto mt-20 p-10 bg-white rounded-2xl border border-red-100 shadow text-center">
+        <ShieldOff size={48} className="text-red-400 mx-auto mb-4" />
+        <h2 className="text-xl font-extrabold text-gray-800 mb-2">Không có quyền truy cập</h2>
+        <p className="text-gray-500 mb-6">Tính năng duyệt câu hỏi chỉ dành cho <strong>Giáo viên</strong> và <strong>Admin</strong>.</p>
+        <Link href="/quizzes" className="px-6 py-2.5 bg-blue-600 text-white font-bold rounded-xl hover:bg-blue-700 transition-colors">
+          Về Bộ câu hỏi
+        </Link>
+      </div>
+    );
+  }
 
   return (
     <div className="animate-slide-in-right max-w-4xl mx-auto mt-4 px-4 pb-20">
