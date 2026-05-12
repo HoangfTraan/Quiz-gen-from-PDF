@@ -80,8 +80,8 @@ export default async function QuizzesPage(props: {
                   <BookOpen size={20} />
                 </div>
 
-                {/* Badge Bản nháp / Đã lưu: ẩn với learner */}
-                {!canTake && (
+                {/* Badge Bản nháp / Đã lưu: chỉ hiện với teacher/admin (canManage) */}
+                {canManage && (
                   <span
                     className={`px-2 py-1 text-xs font-semibold rounded-full ${
                       quiz.status === "published"

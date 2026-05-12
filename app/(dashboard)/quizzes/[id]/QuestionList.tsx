@@ -6,6 +6,18 @@ import { createClient } from "@/utils/supabase/client";
 import { useRouter } from "next/navigation";
 import ConfirmModal from "@/components/ConfirmModal";
 
+const normalizeBloomLevel = (level?: string | null) => {
+  if (!level) return null;
+  const clean = level.trim().toLowerCase();
+  if (clean === "nhớ" || clean === "remember") return "Nhớ";
+  if (clean === "hiểu" || clean === "understand") return "Hiểu";
+  if (clean === "vận dụng" || clean === "apply") return "Vận dụng";
+  if (clean === "phân tích" || clean === "analyze") return "Phân tích";
+  if (clean === "đánh giá" || clean === "evaluate") return "Đánh giá";
+  if (clean === "sáng tạo" || clean === "create") return "Sáng tạo";
+  return null;
+};
+
 export default function QuestionList({ initialQuestions, quizId, canEdit = true }: { initialQuestions: any[], quizId: string, canEdit?: boolean }) {
   const [questions, setQuestions] = useState(initialQuestions || []);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -17,12 +29,12 @@ export default function QuestionList({ initialQuestions, quizId, canEdit = true 
   const router = useRouter();
 
   const parseExplanation = (text?: string, dbDiff?: string) => {
-    if (!text) return { diff: dbDiff || null, text: '' };
+    if (!text) return { diff: normalizeBloomLevel(dbDiff), text: '' };
     const tagMatch = text.match(/^\[MỨC ĐỘ:\s*(.*?)\]\s*(.*)/is);
-    if (tagMatch) return { diff: tagMatch[1].trim(), text: tagMatch[2] };
+    if (tagMatch) return { diff: normalizeBloomLevel(tagMatch[1]), text: tagMatch[2] };
     const aiMatch = text.match(/^(?:Đây là )?(?:câu hỏi )?(?:ở )?(?:mức độ|cấp độ)\s+([^.]*?)\.\s*(.*)/is);
-    if (aiMatch) return { diff: aiMatch[1].trim(), text: aiMatch[2] };
-    return { diff: dbDiff || null, text };
+    if (aiMatch) return { diff: normalizeBloomLevel(aiMatch[1]), text: aiMatch[2] };
+    return { diff: normalizeBloomLevel(dbDiff), text };
   };
 
   const handleEdit = (q: any) => {
@@ -86,7 +98,7 @@ export default function QuestionList({ initialQuestions, quizId, canEdit = true 
             quiz_id: quizId,
             question_text: editForm.question_text,
             explanation: fullExplanation,
-            difficulty: editForm.bloom_level, // LƯU VÀO CỘT RIÊNG
+            difficulty: editForm.bloom_level || null, // LƯU VÀO CỘT RIÊNG
             question_type: "mcq",
             ai_generated: false,
             quality_score: 100,
@@ -125,7 +137,7 @@ export default function QuestionList({ initialQuestions, quizId, canEdit = true 
           .update({
             question_text: editForm.question_text,
             explanation: fullExplanation,
-            difficulty: editForm.bloom_level, // LƯU VÀO CỘT RIÊNG
+            difficulty: editForm.bloom_level || null, // LƯU VÀO CỘT RIÊNG
           })
           .eq("id", editForm.id);
 
@@ -152,7 +164,7 @@ export default function QuestionList({ initialQuestions, quizId, canEdit = true 
         // Update local state
         setQuestions(questions.map(q =>
           q.id === editForm.id
-            ? { ...q, question_text: editForm.question_text, explanation: fullExplanation, difficulty: editForm.bloom_level, question_options: optsData }
+            ? { ...q, question_text: editForm.question_text, explanation: fullExplanation, difficulty: editForm.bloom_level || null, question_options: optsData }
             : q
         ));
       }

@@ -28,6 +28,11 @@ export default function DocumentAnalysisPage({ params }: { params: Promise<{ id:
   const [canReview, setCanReview] = useState(false);
   // true = learner làm bài
   const [canTake, setCanTake] = useState(false);
+  const [roleLoading, setRoleLoading] = useState(true);
+
+  const canReviewRef = useRef(false);
+  const canTakeRef = useRef(false);
+  const roleLoadingRef = useRef(true);
 
   // Use ref to prevent supabase from triggering effect re-runs
   const supabaseRef = useRef(createClient());
@@ -52,18 +57,35 @@ export default function DocumentAnalysisPage({ params }: { params: Promise<{ id:
   // Kiểm tra role ngay khi mount — teacher/admin được duyệt đề, learner làm bài, còn lại chỉ xem
   useEffect(() => {
     async function checkRole() {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
-      const { data: dbUser } = await supabase.from('users').select('role').eq('id', user.id).single();
-      if (dbUser?.role === 'admin') { setCanReview(true); return; }
-      const { data: userRoles } = await supabase
-        .from('user_roles').select('id, roles!inner(name)')
-        .eq('user_id', user.id);
-      
-      if (userRoles && userRoles.length > 0) {
-        const roleNames = userRoles.map((ur: any) => ur.roles?.name);
-        if (roleNames.includes('teacher')) setCanReview(true);
-        if (roleNames.includes('learner')) setCanTake(true);
+      try {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) return;
+        const { data: dbUser } = await supabase.from('users').select('role').eq('id', user.id).single();
+        if (dbUser?.role === 'admin') { 
+          setCanReview(true); 
+          canReviewRef.current = true;
+          return; 
+        }
+        const { data: userRoles } = await supabase
+          .from('user_roles').select('id, roles!inner(name)')
+          .eq('user_id', user.id);
+        
+        if (userRoles && userRoles.length > 0) {
+          const roleNames = userRoles.map((ur: any) => ur.roles?.name);
+          if (roleNames.includes('teacher')) {
+            setCanReview(true);
+            canReviewRef.current = true;
+          }
+          if (roleNames.includes('learner')) {
+            setCanTake(true);
+            canTakeRef.current = true;
+          }
+        }
+      } catch (err) {
+        console.error("Error checking role:", err);
+      } finally {
+        setRoleLoading(false);
+        roleLoadingRef.current = false;
       }
     }
     checkRole();
@@ -94,11 +116,14 @@ export default function DocumentAnalysisPage({ params }: { params: Promise<{ id:
         if (doc.status === 'completed') {
           const { data: qz } = await supabase.from('quizzes').select('id').eq('document_id', documentId).single();
           if (qz) {
+            if (roleLoadingRef.current) {
+              return; // Đợi lấy vai trò của user thành công rồi mới điều hướng để tránh race condition
+            }
             if (pollInterval) clearInterval(pollInterval);
-            // Redirect theo role: teacher/admin → review, learner → start, còn lại → xem bộ đề
-            if (canReview) {
-              router.push(`/quizzes/${qz.id}/review`);
-            } else if (canTake) {
+            // Redirect theo role: teacher/admin → xem chi tiết đề, learner → start, còn lại → xem bộ đề
+            if (canReviewRef.current) {
+              router.push(`/quizzes/${qz.id}`);
+            } else if (canTakeRef.current) {
               router.push(`/quizzes/${qz.id}/start`);
             } else {
               router.push(`/quizzes/${qz.id}`);
@@ -278,9 +303,9 @@ export default function DocumentAnalysisPage({ params }: { params: Promise<{ id:
 
             {canReview ? (
               <>
-                <p className="text-gray-500 max-w-md mx-auto mb-8">Tri thức đã được chắt lọc! Bạn có thể kiểm duyệt và phê duyệt bộ câu hỏi.</p>
-                <Link href={`/quizzes/${quizId}/review`} className="w-fit mx-auto bg-blue-600 hover:bg-blue-700 text-white px-8 py-4 rounded-xl font-bold shadow-lg shadow-blue-500/30 flex items-center gap-2 transform transition hover:scale-105">
-                  Kiểm duyệt &amp; Phê duyệt Đề <ArrowRight size={20} />
+                <p className="text-gray-500 max-w-md mx-auto mb-8">Tri thức đã được chắt lọc! Bộ đề của bạn đã được tạo thành công.</p>
+                <Link href={`/quizzes/${quizId}`} className="w-fit mx-auto bg-blue-600 hover:bg-blue-700 text-white px-8 py-4 rounded-xl font-bold shadow-lg shadow-blue-500/30 flex items-center gap-2 transform transition hover:scale-105">
+                  Xem chi tiết bộ đề <ArrowRight size={20} />
                 </Link>
               </>
             ) : canTake ? (

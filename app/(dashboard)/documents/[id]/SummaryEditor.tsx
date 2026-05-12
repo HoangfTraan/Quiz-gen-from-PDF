@@ -93,7 +93,6 @@ export default function SummaryEditor({
         ) : (
           <div className="flex flex-col items-center py-8 text-gray-400">
             <p>Tài liệu chưa phân tích nội dung tóm tắt.</p>
-            {status !== 'completed' && <Link href={`/documents/${documentId}/analysis`} className="text-blue-500 font-medium underline mt-2 hover:text-blue-700">Xem tiến trình</Link>}
           </div>
         )}
       </div>

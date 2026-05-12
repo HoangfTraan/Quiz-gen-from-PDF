@@ -14,6 +14,7 @@ import {
   LayoutDashboard,
   LogOut,
   User as UserIcon,
+  UserPlus
 } from "lucide-react";
 import { createClient } from "@/utils/supabase/client";
 
@@ -22,6 +23,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   const [userName, setUserName] = useState("Admin");
   const [userInitial, setUserInitial] = useState("A");
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
+  const [pendingRequestsCount, setPendingRequestsCount] = useState(0);
   const pathname = usePathname();
   const supabase = createClient();
 
@@ -50,6 +52,52 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     fetchUser();
   }, [supabase]);
 
+  // Real-time subscription for Role Requests notification dot
+  useEffect(() => {
+    let channel: any;
+
+    const fetchPendingCount = async () => {
+      try {
+        const { count } = await supabase
+          .from("role_requests")
+          .select("*", { count: "exact", head: true })
+          .eq("status", "pending");
+        if (count !== null) setPendingRequestsCount(count);
+      } catch (err) {
+        console.warn("Could not fetch pending role requests count:", err);
+      }
+    };
+
+    fetchPendingCount();
+
+    // Subscribe to any changes on the role_requests table
+    try {
+      channel = supabase
+        .channel("role_requests_changes")
+        .on(
+          "postgres_changes",
+          {
+            event: "*",
+            schema: "public",
+            table: "role_requests",
+          },
+          () => {
+            // Re-fetch the count whenever there's any change
+            fetchPendingCount();
+          }
+        )
+        .subscribe();
+    } catch (e) {
+      console.warn("Failed to subscribe to realtime role_requests changes:", e);
+    }
+
+    return () => {
+      if (channel) {
+        supabase.removeChannel(channel);
+      }
+    };
+  }, [supabase]);
+
   const handleLogout = async () => {
     await supabase.auth.signOut();
     window.location.href = "/login";
@@ -58,6 +106,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   const navigation = [
     { name: "Tổng quan", href: "/admin", icon: LayoutDashboard },
     { name: "Người dùng", href: "/admin/users", icon: Users },
+    { name: "Yêu cầu quyền", href: "/admin/role-requests", icon: UserPlus },
     { name: "Tài liệu", href: "/admin/documents", icon: Files },
     { name: "Câu hỏi", href: "/admin/questions", icon: HelpCircle },
     { name: "Hồ sơ", href: "/admin/profile", icon: UserIcon },
@@ -95,7 +144,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                 <Link
                   key={item.name}
                   href={item.href}
-                  className={`flex items-center gap-3 px-4 py-3 rounded-lg font-medium transition-colors ${
+                  className={`flex items-center gap-3 px-4 py-3 rounded-lg font-medium transition-colors relative ${
                     isActive
                       ? "bg-blue-600 text-white shadow-lg"
                       : "text-gray-400 hover:bg-gray-800 hover:text-white"
@@ -103,6 +152,14 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                 >
                   <item.icon size={20} className={isActive ? "text-white" : "text-gray-400"} />
                   {item.name}
+
+                  {/* Red dot notification for pending requests */}
+                  {item.name === "Yêu cầu quyền" && pendingRequestsCount > 0 && (
+                    <span className="absolute right-4 top-1/2 -translate-y-1/2 flex h-2.5 w-2.5">
+                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
+                      <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.8)]"></span>
+                    </span>
+                  )}
                 </Link>
               );
             })}

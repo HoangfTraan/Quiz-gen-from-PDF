@@ -15,6 +15,13 @@ export default function ProfilePage() {
   const [uploading, setUploading] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [message, setMessage] = useState("");
+  
+  // States for Role Requests
+  const [currentRole, setCurrentRole] = useState("Người dùng");
+  const [pendingRequest, setPendingRequest] = useState<any>(null);
+  const [requestedRole, setRequestedRole] = useState("teacher");
+  const [requestingRole, setRequestingRole] = useState(false);
+
   const fileInputRef = useRef<HTMLInputElement>(null);
   const supabase = createClient();
 
@@ -25,7 +32,7 @@ export default function ProfilePage() {
         setEmail(user.email || "");
         const { data: dbUser } = await supabase
           .from('users')
-          .select('full_name, avatar')
+          .select('full_name, avatar, role')
           .eq('id', user.id)
           .single();
         
@@ -39,6 +46,39 @@ export default function ProfilePage() {
           if (dbUser.avatar) {
             setAvatarUrl(dbUser.avatar);
           }
+
+          // Fetch current user roles
+          const { data: userRoles } = await supabase
+            .from('user_roles')
+            .select('roles(name)')
+            .eq('user_id', user.id);
+            
+          let roleDisplay = "Người dùng";
+          if (dbUser.role === 'admin') {
+            roleDisplay = "Admin";
+          } else if (userRoles && userRoles.length > 0) {
+             const roles = userRoles.map(ur => Array.isArray(ur.roles) ? ur.roles[0]?.name : (ur.roles as any)?.name);
+             if (roles.includes("teacher")) roleDisplay = "Giáo viên";
+             else if (roles.includes("learner")) roleDisplay = "Người học";
+          }
+          setCurrentRole(roleDisplay);
+        }
+
+        // Fetch any pending role requests (wrap in try-catch to avoid errors if table doesn't exist yet)
+        try {
+          const { data: requests } = await supabase
+            .from('role_requests')
+            .select('*')
+            .eq('user_id', user.id)
+            .eq('status', 'pending')
+            .order('created_at', { ascending: false })
+            .limit(1);
+            
+          if (requests && requests.length > 0) {
+            setPendingRequest(requests[0]);
+          }
+        } catch (e) {
+          console.warn("role_requests table might not exist yet:", e);
         }
       }
       setLoading(false);
@@ -176,6 +216,34 @@ export default function ProfilePage() {
     }
   };
 
+  const handleRoleRequest = async () => {
+    setRequestingRole(true);
+    setMessage("");
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error("Chưa đăng nhập");
+
+      const { error } = await supabase.from('role_requests').insert({
+        user_id: user.id,
+        requested_role: requestedRole
+      });
+
+      if (error) throw error;
+      
+      setMessage("Yêu cầu đổi quyền đã được gửi thành công. Vui lòng chờ Admin phê duyệt.");
+      setPendingRequest({ requested_role: requestedRole, status: 'pending' });
+    } catch (e: any) {
+      console.error(e);
+      let errorMsg = e.message;
+      if (errorMsg?.includes('role_requests')) {
+        errorMsg = "Bảng dữ liệu yêu cầu quyền chưa được khởi tạo. Vui lòng liên hệ Admin.";
+      }
+      setMessage("Lỗi: " + errorMsg);
+    } finally {
+      setRequestingRole(false);
+    }
+  };
+
   if (loading) {
     return <div className="flex justify-center mt-20"><Loader2 className="animate-spin text-blue-600" size={40} /></div>;
   }
@@ -302,6 +370,53 @@ export default function ProfilePage() {
           <button className="w-full bg-gray-900 hover:bg-black text-white px-6 py-4 rounded-2xl font-black text-sm tracking-widest transition-all hover:shadow-xl active:scale-95">
             CẬP NHẬT MẬT KHẨU
           </button>
+        </div>
+      </div>
+
+      <div className="bg-white p-10 rounded-3xl shadow-xl shadow-gray-200/50 border border-gray-100 transition-all hover:shadow-2xl mt-10">
+        <h2 className="text-xl font-black text-gray-900 mb-8 flex items-center gap-3">
+          <div className="p-2 bg-purple-100 text-purple-600 rounded-xl">
+            <Shield size={20} />
+          </div>
+          Phân quyền tài khoản
+        </h2>
+        
+        <div className="space-y-5 max-w-md">
+          <div className="p-4 bg-gray-50 border border-gray-100 rounded-xl">
+            <p className="text-sm text-gray-500 font-bold mb-1 uppercase tracking-wider text-[10px]">Quyền hiện tại</p>
+            <p className="font-black text-lg text-purple-700">{currentRole}</p>
+          </div>
+          
+          {pendingRequest ? (
+            <div className="p-4 bg-yellow-50 border border-yellow-200 rounded-xl">
+              <p className="text-sm font-bold text-yellow-800">
+                Đang chờ phê duyệt quyền: <span className="uppercase text-yellow-900 ml-1">{pendingRequest.requested_role === 'teacher' ? 'Giáo viên' : 'Người học'}</span>
+              </p>
+              <p className="text-xs text-yellow-700 mt-2 font-medium">Admin sẽ xem xét và phản hồi yêu cầu của bạn sớm nhất.</p>
+            </div>
+          ) : (
+             <div className="space-y-4">
+               <label className="block text-sm font-bold text-gray-700">Yêu cầu thay đổi quyền</label>
+               <select 
+                 value={requestedRole} 
+                 onChange={e => setRequestedRole(e.target.value)}
+                 className="w-full px-5 py-3.5 bg-gray-50 border-2 border-gray-50 rounded-xl focus:ring-4 focus:ring-purple-50 focus:border-purple-500 focus:bg-white outline-none transition-all font-bold text-gray-800 cursor-pointer"
+               >
+                 <option value="teacher">Giáo viên (Tạo, xem, kiểm duyệt đề)</option>
+                 <option value="learner">Người học (Chỉ tạo đề, làm bài, xem điểm)</option>
+               </select>
+               
+               {/* Disabled logic: disable if they are already that role */}
+               <button 
+                 onClick={handleRoleRequest}
+                 disabled={requestingRole || (currentRole === "Giáo viên" && requestedRole === "teacher") || (currentRole === "Người học" && requestedRole === "learner") || currentRole === "Admin"}
+                 className="w-full bg-purple-600 hover:bg-purple-700 text-white px-6 py-4 rounded-2xl font-black text-sm tracking-widest transition-all hover:shadow-xl hover:shadow-purple-200 active:scale-95 disabled:bg-gray-300 disabled:text-gray-500 disabled:shadow-none flex items-center justify-center gap-2"
+               >
+                 {requestingRole ? <Loader2 size={18} className="animate-spin" /> : null}
+                 {currentRole === "Admin" ? "BẠN ĐÃ LÀ ADMIN" : "GỬI YÊU CẦU ĐỔI QUYỀN"}
+               </button>
+             </div>
+          )}
         </div>
       </div>
 

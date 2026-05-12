@@ -1,9 +1,9 @@
 import Link from "next/link";
-import { ArrowLeft, Play, Edit3 } from "lucide-react";
+import { ArrowLeft, Play } from "lucide-react";
 import QuestionList from "./QuestionList";
 import QuizActions from "./QuizActions";
 import { createClient } from "@/utils/supabase/server";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { getUserRole } from "@/utils/rbac-server";
 import { canManageQuiz, canTakeQuiz } from "@/utils/rbac";
 
@@ -20,6 +20,12 @@ export default async function QuizDetailsPage({
     data: { user },
   } = await supabase.auth.getUser();
   const role = user ? await getUserRole(user.id) : "user";
+
+  // Người học không được xem trước đề và đáp án, đưa vào trang làm bài thi luôn
+  if (role === "learner") {
+    redirect(`/quizzes/${id}/start`);
+  }
+
   const canManage = canManageQuiz(role);
   const canTake = canTakeQuiz(role);
 
@@ -55,15 +61,6 @@ export default async function QuizDetailsPage({
           <ArrowLeft size={16} /> Bộ câu hỏi
         </Link>
         <div className="flex flex-wrap gap-2">
-          {/* Kiểm duyệt: chỉ teacher/admin */}
-          {canManage && quiz.status === "draft" && (
-            <Link
-              href={`/quizzes/${id}/review`}
-              className="px-4 py-2 text-sm font-medium border border-blue-300 text-blue-700 bg-blue-50 rounded-lg hover:bg-blue-100 flex items-center gap-2"
-            >
-              <Edit3 size={16} /> Kiểm duyệt ngay
-            </Link>
-          )}
 
           {/* Xóa / Publish: chỉ teacher/admin */}
           {canManage && (
@@ -80,14 +77,7 @@ export default async function QuizDetailsPage({
             </Link>
           )}
 
-          {/* Thông báo cho user/teacher không được làm bài */}
-          {!canTake && role !== "learner" && (
-            <span className="px-4 py-2 text-sm text-gray-400 bg-gray-50 border border-gray-200 rounded-lg">
-              {role === "teacher" || role === "admin"
-                ? "Giáo viên không làm bài"
-                : "Yêu cầu quyền Người học để làm bài"}
-            </span>
-          )}
+
         </div>
       </div>
 
