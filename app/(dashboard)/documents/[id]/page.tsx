@@ -13,24 +13,28 @@ export default async function DocumentDetailsPage({ params }: { params: Promise<
   const supabase = await createClient();
 
   const { data: { user } } = await supabase.auth.getUser();
-  const role = user ? await getUserRole(user.id) : "user";
-  const canTake = canTakeQuiz(role);
+  if (!user) return notFound();
 
-  // Fetch document details
-  const { data: doc } = await supabase.from('documents').select('*, subjects(name)').eq('id', id).single();
+  // Song song hóa toàn bộ truy vấn dữ liệu bằng Promise.all để tối ưu hóa thời gian phản hồi
+  const [role, docResult, contentResult, latestQuizResult] = await Promise.all([
+    getUserRole(user.id),
+    supabase.from('documents').select('*, subjects(name)').eq('id', id).single(),
+    supabase.from('document_contents').select('summary, keywords').eq('document_id', id).single(),
+    supabase
+      .from('quizzes')
+      .select('id')
+      .eq('document_id', id)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+  ]);
+
+  const doc = docResult.data;
   if (!doc) return notFound();
 
-  // Fetch document contents (summary and keywords)
-  const { data: content } = await supabase.from('document_contents').select('summary, keywords').eq('document_id', id).single();
-
-  // Check if a quiz already exists for this document
-  const { data: latestQuiz } = await supabase
-    .from('quizzes')
-    .select('id')
-    .eq('document_id', id)
-    .order('created_at', { ascending: false })
-    .limit(1)
-    .maybeSingle();
+  const canTake = canTakeQuiz(role);
+  const content = contentResult.data;
+  const latestQuiz = latestQuizResult.data;
 
   const learnerHref = latestQuiz ? `/quizzes/${latestQuiz.id}/start` : `/documents/${id}/analysis`;
   const teacherHref = latestQuiz ? `/quizzes/${latestQuiz.id}` : `/documents/${id}/analysis`;

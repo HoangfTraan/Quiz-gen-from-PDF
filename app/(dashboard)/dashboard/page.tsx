@@ -52,38 +52,50 @@ export default function DashboardPage() {
       }
       setRole(currentRole);
 
-      // 2. Định nghĩa hàm fetch dữ liệu thống kê
+      // 2. Định nghĩa hàm fetch dữ liệu thống kê song song
       const fetchCounts = async () => {
-        // Lấy tài liệu đã tải
-        const { count: docs } = await supabase
-          .from('documents')
-          .select('*', { count: 'exact', head: true })
-          .eq('user_id', user.id);
-        setDocsCount(docs || 0);
-
-        // Lấy bộ đề đã tạo
-        const { count: qz } = await supabase
-          .from('quizzes')
-          .select('*', { count: 'exact', head: true })
-          .eq('user_id', user.id);
-        setQuizzesCount(qz || 0);
-
-        // Lấy số bài đã làm (chỉ cho learner)
         if (currentRole === "learner") {
-          const { count: att } = await supabase
-            .from('quiz_attempts')
-            .select('*', { count: 'exact', head: true })
-            .eq('user_id', user.id);
-          setAttemptsCount(att || 0);
+          // Chạy đồng thời cả 4 truy vấn cho người học
+          const [docsRes, quizzesRes, attemptsRes, recommendationsRes] = await Promise.all([
+            supabase
+              .from('documents')
+              .select('*', { count: 'exact', head: true })
+              .eq('user_id', user.id),
+            supabase
+              .from('quizzes')
+              .select('*', { count: 'exact', head: true })
+              .eq('user_id', user.id),
+            supabase
+              .from('quiz_attempts')
+              .select('*', { count: 'exact', head: true })
+              .eq('user_id', user.id),
+            supabase
+              .from('study_recommendations')
+              .select('id, recommendation_text, reason, created_at')
+              .eq('user_id', user.id)
+              .order('created_at', { ascending: false })
+              .limit(3)
+          ]);
 
-          // Lấy gợi ý học tiếp
-          const { data: recs } = await supabase
-            .from('study_recommendations')
-            .select('id, recommendation_text, reason, created_at')
-            .eq('user_id', user.id)
-            .order('created_at', { ascending: false })
-            .limit(3);
-          setRecommendations(recs || []);
+          setDocsCount(docsRes.count || 0);
+          setQuizzesCount(quizzesRes.count || 0);
+          setAttemptsCount(attemptsRes.count || 0);
+          setRecommendations(recommendationsRes.data || []);
+        } else {
+          // Chạy đồng thời 2 truy vấn cho Giáo viên / Admin / Người dùng thường
+          const [docsRes, quizzesRes] = await Promise.all([
+            supabase
+              .from('documents')
+              .select('*', { count: 'exact', head: true })
+              .eq('user_id', user.id),
+            supabase
+              .from('quizzes')
+              .select('*', { count: 'exact', head: true })
+              .eq('user_id', user.id)
+          ]);
+
+          setDocsCount(docsRes.count || 0);
+          setQuizzesCount(quizzesRes.count || 0);
         }
       };
 

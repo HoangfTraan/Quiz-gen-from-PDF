@@ -12,21 +12,23 @@ export { canManageQuiz, canTakeQuiz, canViewScores, getRoleLabel, getRoleBadgeCl
 export async function getUserRole(userId: string): Promise<AppRole> {
   const supabase = await createClient();
 
-  // 1. Kiểm tra admin qua cột role (backward-compatible)
-  const { data: dbUser } = await supabase
-    .from("users")
-    .select("role")
-    .eq("id", userId)
-    .single();
+  // Song song hóa truy vấn để tránh network thắt cổ chai
+  const [dbUserResult, userRolesResult] = await Promise.all([
+    supabase
+      .from("users")
+      .select("role")
+      .eq("id", userId)
+      .single(),
+    supabase
+      .from("user_roles")
+      .select("roles(name)")
+      .eq("user_id", userId)
+  ]);
 
+  const dbUser = dbUserResult.data;
   if (dbUser?.role === "admin") return "admin";
 
-  // 2. Kiểm tra teacher / learner qua user_roles
-  const { data: userRoles } = await supabase
-    .from("user_roles")
-    .select("roles(name)")
-    .eq("user_id", userId);
-
+  const userRoles = userRolesResult.data;
   if (userRoles && userRoles.length > 0) {
     const roleNames = userRoles
       .map((ur: any) => {

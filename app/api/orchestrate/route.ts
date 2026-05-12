@@ -160,20 +160,26 @@ async function processDocument(documentId: string, accessToken: string, refreshT
 
         let totalInserted = 0;
         if (chunksToProcess.length > 0 && qId) {
+            // Lấy toàn bộ các câu hỏi đã được tạo trước đó của bộ đề này để tạo Set tra cứu nhanh trong RAM (tránh loop DB)
+            const { data: existingQuizQs } = await supabase
+                .from('questions')
+                .select('document_chunk_id')
+                .eq('quiz_id', qId);
+            const chunksWithQuestions = new Set(existingQuizQs?.map(q => q.document_chunk_id).filter(Boolean));
+
             for (let i = 0; i < chunksToProcess.length; i++) {
                 // Check cancel
                 const { data: currentDoc } = await supabase.from('documents').select('status').eq('id', documentId).single();
                 if (currentDoc?.status === 'failed') return;
                 
-                // Check if already generated
-                const { data: existingQs } = await supabase.from('questions').select('id').eq('document_chunk_id', chunksToProcess[i].id).limit(1);
-                const hasGen = existingQs && existingQs.length > 0;
+                // Tra cứu trực tiếp trong RAM bằng Set, giảm hàng chục lượt truy cập DB thắt cổ chai
+                const hasGen = chunksWithQuestions.has(chunksToProcess[i].id);
                 
                 if (!hasGen) {
                     // Stop early if we've reached the target
                     if (totalInserted >= questionCount) {
-                        console.log(`[Orchestrate ${documentId}] Target reached (${totalInserted}/${questionCount}), stopping`);
-                        break;
+                         console.log(`[Orchestrate ${documentId}] Target reached (${totalInserted}/${questionCount}), stopping`);
+                         break;
                     }
                     try {
                         const remaining = questionCount - totalInserted;
@@ -219,46 +225,67 @@ ${chunksToProcess[i].content}
                             return "Nhớ";
                         };
 
-                        for (const q of aiData.questions) {
-                           let diff = q.difficulty;
-                           if (!diff || !BLOOM_LEVELS.some(l => diff.includes(l))) {
-                              diff = guessBloomLevel(q.question_text, q.explanation || "");
-                           }
-                           // Nếu có bloom filter, ép difficulty vào cấp độ được chọn
-                           if (bloomLevels.length > 0 && !bloomLevels.includes(diff)) {
-                              diff = bloomLevels[Math.floor(Math.random() * bloomLevels.length)];
-                           }
-                           const difficultyTag = `[MỨC ĐỘ: ${diff.toUpperCase()}] `;
+                        // 1. Chuẩn bị danh sách câu hỏi để chèn hàng loạt (Batch Insert)
+                        const questionsToInsert = aiData.questions.map((q: any) => {
+                            let diff = q.difficulty;
+                            if (!diff || !BLOOM_LEVELS.some(l => diff.includes(l))) {
+                               diff = guessBloomLevel(q.question_text, q.explanation || "");
+                            }
+                            // Nếu có bloom filter, ép difficulty vào cấp độ được chọn
+                            if (bloomLevels.length > 0 && !bloomLevels.includes(diff)) {
+                               diff = bloomLevels[Math.floor(Math.random() * bloomLevels.length)];
+                            }
+                            const difficultyTag = `[MỨC ĐỘ: ${diff.toUpperCase()}] `;
 
-                           const { data: dbQuestion, error: qInsertErr } = await supabase.from('questions').insert({
-                              quiz_id: qId, 
-                              document_chunk_id: chunksToProcess[i].id, 
-                              question_text: q.question_text, 
-                              question_type: 'mcq', 
-                              explanation: difficultyTag + (q.explanation || ''),
-                              difficulty: diff,
-                              ai_generated: true, 
-                              quality_score: 100
-                           }).select().single();
-                           
-                           if (qInsertErr) {
-                              console.error(`[Orchestrate ${documentId}] QUESTION INSERT FAILED:`, qInsertErr);
-                              // If first insert fails, likely ALL will fail (RLS/schema issue)
-                              if (totalInserted === 0) {
-                                 throw new Error("Không thể lưu câu hỏi: " + qInsertErr.message);
-                              }
-                              continue;
+                            return {
+                               quiz_id: qId,
+                               document_chunk_id: chunksToProcess[i].id,
+                               question_text: q.question_text,
+                               question_type: 'mcq',
+                               explanation: difficultyTag + (q.explanation || ''),
+                               difficulty: diff,
+                               ai_generated: true,
+                               quality_score: 100
+                            };
+                        });
+
+                        // Chèn tất cả câu hỏi của mảnh hiện tại trong 1 truy vấn duy nhất
+                        const { data: dbQuestions, error: qInsertErr } = await supabase
+                            .from('questions')
+                            .insert(questionsToInsert)
+                            .select();
+
+                        if (qInsertErr) {
+                           console.error(`[Orchestrate ${documentId}] QUESTIONS INSERT FAILED:`, qInsertErr);
+                           if (totalInserted === 0) {
+                              throw new Error("Không thể lưu câu hỏi: " + qInsertErr.message);
                            }
-                           
-                           if (dbQuestion) {
-                              totalInserted++;
-                              const optionsTable = q.options.map((optText: string, idx: number) => ({
-                                 question_id: dbQuestion.id, option_text: optText, is_correct: idx === q.correct_index, option_label: ['A', 'B', 'C', 'D'][idx] || ''
-                              }));
-                              const { error: optErr } = await supabase.from('question_options').insert(optionsTable);
+                           continue;
+                        }
+
+                        // 2. Chèn toàn bộ phương án tương ứng trong 1 truy vấn duy nhất
+                        if (dbQuestions && dbQuestions.length > 0) {
+                           const optionsToInsert: any[] = [];
+                           dbQuestions.forEach((dbQ: any, idx: number) => {
+                              const originalQ = aiData.questions[idx];
+                              if (originalQ) {
+                                 const chunkOptions = originalQ.options.map((optText: string, oIdx: number) => ({
+                                    question_id: dbQ.id,
+                                    option_text: optText,
+                                    is_correct: oIdx === originalQ.correct_index,
+                                    option_label: ['A', 'B', 'C', 'D'][oIdx] || ''
+                                 }));
+                                 optionsToInsert.push(...chunkOptions);
+                              }
+                           });
+
+                           if (optionsToInsert.length > 0) {
+                              const { error: optErr } = await supabase.from('question_options').insert(optionsToInsert);
                               if (optErr) console.error(`[Orchestrate ${documentId}] Options insert error:`, optErr);
                            }
+                           totalInserted += dbQuestions.length;
                         }
+
                         console.log(`[Orchestrate ${documentId}] Chunk ${i+1}/${chunksToProcess.length} (${source}): ${aiData.questions?.length || 0} generated, ${totalInserted} total saved`);
                     } catch (chunkErr: any) {
                         console.error(`[Orchestrate ${documentId}] Chunk ${i+1} error:`, chunkErr.message);

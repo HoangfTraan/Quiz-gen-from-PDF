@@ -29,27 +29,32 @@ export default async function QuizDetailsPage({
   const canManage = canManageQuiz(role);
   const canTake = canTakeQuiz(role);
 
-  const { data: quiz } = await supabase
-    .from("quizzes")
-    .select("*, documents(title)")
-    .eq("id", id)
-    .single();
+  // Song song hóa việc lấy thông tin bộ đề và danh sách câu hỏi kèm đáp án
+  const [quizResult, questionsResult] = await Promise.all([
+    supabase
+      .from("quizzes")
+      .select("*, documents(title)")
+      .eq("id", id)
+      .single(),
+    supabase
+      .from("questions")
+      .select(
+        `
+         id,
+         question_text,
+         explanation,
+         difficulty,
+         moderation_status,
+         question_options (id, option_label, option_text, is_correct)
+      `
+      )
+      .eq("quiz_id", id)
+  ]);
 
+  const quiz = quizResult.data;
   if (!quiz) return notFound();
 
-  const { data: questions } = await supabase
-    .from("questions")
-    .select(
-      `
-       id,
-       question_text,
-       explanation,
-       difficulty,
-       moderation_status,
-       question_options (id, option_label, option_text, is_correct)
-    `
-    )
-    .eq("quiz_id", id);
+  const questions = questionsResult.data;
 
   return (
     <div className="animate-slide-in-right max-w-4xl mx-auto px-4 pb-20">
