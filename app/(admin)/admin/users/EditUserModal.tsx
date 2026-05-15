@@ -4,6 +4,7 @@ import { useState, useTransition, useEffect } from "react";
 import { createPortal } from "react-dom";
 import { X, User, Shield, Check, BookMarked, GraduationCap } from "lucide-react";
 import { updateUserAction } from "./actions";
+import { createClient } from "@/utils/supabase/client";
 import type { AppRole } from "@/utils/rbac";
 import { getRoleLabel } from "@/utils/rbac";
 
@@ -91,7 +92,26 @@ export default function EditUserModal({
         if (result && result.error) {
           setError(result.error);
         } else {
-          onClose();
+          // Phát tín hiệu Broadcast để trình duyệt của người dùng tự động cập nhật Role
+          const supabase = createClient();
+          const channel = supabase.channel(`layout_user_${user.id}`);
+          channel.subscribe((status) => {
+            if (status === 'SUBSCRIBED') {
+              channel.send({
+                type: 'broadcast',
+                event: 'role_updated',
+                payload: { userId: user.id }
+              }).then(() => {
+                supabase.removeChannel(channel);
+                onClose();
+              });
+            } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+               onClose();
+            }
+          });
+          
+          // Trả phòng trường hợp websocket bị chậm
+          setTimeout(onClose, 500);
         }
       } catch (err: any) {
         setError(err.message || "Đã xảy ra lỗi khi cập nhật");

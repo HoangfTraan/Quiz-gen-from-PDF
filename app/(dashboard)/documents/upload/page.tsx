@@ -2,9 +2,10 @@
 
 import { useState, useEffect } from "react";
 import { createPortal } from "react-dom";
-import { Upload, Loader2, FileCheck, AlertCircle } from "lucide-react";
+import { Upload, Loader2, FileCheck, AlertCircle, ShieldOff } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/utils/supabase/client";
+import Link from "next/link";
 
 export default function DocumentUploadPage() {
   const [file, setFile] = useState<File | null>(null);
@@ -17,6 +18,7 @@ export default function DocumentUploadPage() {
   const [isErrorExiting, setIsErrorExiting] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
   const [mounted, setMounted] = useState(false);
+  const [accessDenied, setAccessDenied] = useState(false);
   const router = useRouter();
   const supabase = createClient();
 
@@ -35,7 +37,25 @@ export default function DocumentUploadPage() {
     }
   }, [errorText]);
 
+  // Kiểm tra role: admin không được tải tài liệu
   useEffect(() => {
+    const checkRole = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+      const { data: dbUser } = await supabase
+        .from("users")
+        .select("role")
+        .eq("id", user.id)
+        .single();
+      if (dbUser?.role === "admin") {
+        setAccessDenied(true);
+      }
+    };
+    checkRole();
+  }, [supabase]);
+
+  useEffect(() => {
+
     setMounted(true);
     const handleDragOver = (e: DragEvent) => {
       e.preventDefault();
@@ -154,7 +174,25 @@ export default function DocumentUploadPage() {
 
   return (
     <>
-      {mounted && createPortal(
+      {/* Chặn admin truy cập */}
+      {accessDenied && (
+        <div className="max-w-lg mx-auto mt-20 p-10 bg-white rounded-2xl border border-amber-100 shadow text-center">
+          <ShieldOff size={48} className="text-amber-400 mx-auto mb-4" />
+          <h2 className="text-xl font-extrabold text-gray-800 mb-2">Không có quyền tải tài liệu</h2>
+          <p className="text-gray-500 mb-6">
+            Tài khoản <strong>Admin</strong> không sử dụng chức năng này.<br />
+            Quản lý tài liệu của hệ thống tại trang Quản trị.
+          </p>
+          <Link
+            href="/admin/documents"
+            className="px-6 py-2.5 bg-purple-600 text-white font-bold rounded-xl hover:bg-purple-700 transition-colors"
+          >
+            Vào trang Quản trị
+          </Link>
+        </div>
+      )}
+      {!accessDenied && mounted && createPortal(
+
         <div 
           className={`fixed inset-0 z-[200] bg-blue-600/95 flex flex-col items-center justify-center text-white transition-opacity duration-300 ${
             isDragging ? "opacity-100 pointer-events-auto" : "opacity-0 pointer-events-none"
@@ -169,7 +207,7 @@ export default function DocumentUploadPage() {
         document.body
       )}
     
-      <div className="animate-slide-in-right max-w-2xl mx-auto mt-10 relative">
+      {!accessDenied && <div className="animate-slide-in-right max-w-2xl mx-auto mt-10 relative">
         <h1 className="text-2xl font-extrabold text-gray-800 mb-6 text-center">Tải lên tài liệu mới</h1>
 
       <div className="bg-white p-8 rounded-xl shadow-lg border border-gray-100">
@@ -285,7 +323,7 @@ export default function DocumentUploadPage() {
           {loading ? <span className="flex items-center justify-center gap-2"><Loader2 className="animate-spin" /> Đang tải và phân tích...</span> : "Tải lên & Xử lý AI"}
         </button>
       </div>
-    </div>
+    </div>}
     </>
   );
 }

@@ -30,6 +30,18 @@ export default function RoleRequestTable({ requests: initialRequests }: { reques
 
         // 4. Update request status
         await supabase.from('role_requests').update({ status: 'approved' }).eq('id', requestId);
+
+        // Phát tín hiệu Realtime (Broadcast) để giao diện người dùng cập nhật ngay lập tức
+        const channel = supabase.channel(`layout_user_${userId}`);
+        channel.subscribe((status) => {
+          if (status === 'SUBSCRIBED') {
+            channel.send({
+              type: 'broadcast',
+              event: 'role_updated',
+              payload: { userId }
+            }).then(() => supabase.removeChannel(channel));
+          }
+        });
       } else {
         // Just update request status to rejected
         await supabase.from('role_requests').update({ status: 'rejected' }).eq('id', requestId);

@@ -3,7 +3,7 @@
 
 import { createClient } from "@/utils/supabase/server";
 import type { AppRole } from "@/utils/rbac";
-export { canManageQuiz, canTakeQuiz, canViewScores, getRoleLabel, getRoleBadgeClass } from "@/utils/rbac";
+export { canManageQuiz, canTakeQuiz, canViewScores, canAuthorQuiz, canTakePublishedQuiz, getRoleLabel, getRoleBadgeClass } from "@/utils/rbac";
 
 /**
  * Lấy role của user hiện tại.

@@ -129,7 +129,7 @@ export default function ProfilePage() {
 
       const { data: { publicUrl } } = supabase.storage.from('avatars').getPublicUrl(filePath);
       await saveAvatarUrl(user.id, publicUrl);
-      
+      window.dispatchEvent(new Event("user_profile_updated"));
       setMessage("Cập nhật ảnh đại diện thành công!");
     } catch (err: any) {
       console.error("Lỗi upload avatar:", err);
@@ -180,6 +180,7 @@ export default function ProfilePage() {
       // 2. Clear from DB
       await supabase.from('users').update({ avatar: null }).eq('id', user.id);
       setAvatarUrl(null);
+      window.dispatchEvent(new Event("user_profile_updated"));
       setMessage("Đã xóa ảnh đại diện.");
     } catch (err: any) {
       setMessage("Lỗi: " + err.message);
@@ -200,15 +201,11 @@ export default function ProfilePage() {
         await supabase.from('users').update({ full_name: fullName.trim() }).eq('id', user.id);
         setInitial(fullName.trim().charAt(0).toUpperCase());
       }
+      // Bỏ qua cập nhật email do Supabase chặn các email giả (test@gmail.com)
+      setMessage("Lưu thông tin cá nhân thành công.");
       
-      // Cập nhật email trong Supabase Auth
-      if (email.trim() && email !== user.email) {
-        const { error } = await supabase.auth.updateUser({ email: email.trim() });
-        if (error) throw error;
-        setMessage("Cập nhật thành công! (Vui lòng kiểm tra hòm thư email mới để xác nhận nếu được yêu cầu)");
-      } else {
-        setMessage("Lưu thông tin cá nhân thành công.");
-      }
+      // Kích hoạt event để layout tải lại thông tin ngay lập tức
+      window.dispatchEvent(new Event("user_profile_updated"));
     } catch (e: any) {
       setMessage("Lỗi: " + e.message);
     } finally {
@@ -334,10 +331,13 @@ export default function ProfilePage() {
               <input 
                 type="email" 
                 value={email}
-                onChange={e => setEmail(e.target.value)}
-                placeholder="email@example.com"
-                className="w-full px-5 py-3.5 bg-gray-50 border-2 border-gray-50 rounded-2xl focus:ring-4 focus:ring-blue-50 focus:border-blue-500 focus:bg-white outline-none transition-all font-bold text-gray-800 shadow-inner" 
+                readOnly
+                title="Không thể thay đổi địa chỉ email đã đăng ký"
+                className="w-full px-5 py-3.5 bg-gray-100 border-2 border-gray-100 rounded-2xl focus:outline-none text-gray-500 font-bold shadow-inner cursor-not-allowed opacity-70" 
               />
+              <p className="mt-2 text-xs text-amber-600 font-medium flex items-center gap-1">
+                * Email dùng để đăng nhập nên không thể tự thay đổi.
+              </p>
             </div>
           </div>
 

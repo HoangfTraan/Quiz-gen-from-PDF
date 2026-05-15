@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, Suspense } from "react";
 import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
 import {
@@ -16,12 +16,13 @@ import {
   ShieldCheck,
   GraduationCap,
   BookMarked,
+  BarChart,
 } from "lucide-react";
 import { createClient } from "@/utils/supabase/client";
 import type { AppRole } from "@/utils/rbac";
 import { getRoleLabel, getRoleBadgeClass } from "@/utils/rbac";
 
-export default function DashboardLayout({
+function DashboardLayoutContent({
   children,
 }: {
   children: React.ReactNode;
@@ -36,29 +37,31 @@ export default function DashboardLayout({
   const supabase = createClient();
 
   useEffect(() => {
-    const fetchUser = async () => {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-      if (!user) return;
+    let isMounted = true;
+    let channel: ReturnType<typeof supabase.channel> | null = null;
+    let currentUserId: string | null = null;
 
-      // Lấy thông tin cơ bản
+    const fetchUserData = async () => {
+      if (!currentUserId || !isMounted) return;
+
       const { data: dbUser } = await supabase
         .from("users")
-        .select("full_name, role, avatar")
-        .eq("id", user.id)
+        .select("full_name, email, role, avatar")
+        .eq("id", currentUserId)
         .single();
+
+      if (!isMounted) return;
 
       if (dbUser?.full_name) {
         setUserName(dbUser.full_name);
         setUserInitial(dbUser.full_name.charAt(0).toUpperCase());
-      } else if (user.email) {
-        setUserName(user.email);
-        setUserInitial(user.email.charAt(0).toUpperCase());
+      } else if (dbUser?.email) {
+        const email = dbUser.email || "Người dùng";
+        setUserName(email);
+        setUserInitial(email.charAt(0).toUpperCase());
       }
       if (dbUser?.avatar) setAvatarUrl(dbUser.avatar);
 
-      // Xác định role: admin > teacher/learner từ user_roles > user
       if (dbUser?.role === "admin") {
         setUserRole("admin");
         return;
@@ -67,7 +70,9 @@ export default function DashboardLayout({
       const { data: userRoles } = await supabase
         .from("user_roles")
         .select("roles(name)")
-        .eq("user_id", user.id);
+        .eq("user_id", currentUserId);
+
+      if (!isMounted) return;
 
       if (userRoles && userRoles.length > 0) {
         const roleNames = userRoles
@@ -85,10 +90,50 @@ export default function DashboardLayout({
           return;
         }
       }
-
       setUserRole("user");
     };
-    fetchUser();
+
+    const init = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user || !isMounted) return;
+      currentUserId = user.id;
+
+      await fetchUserData();
+
+      if (!isMounted) return;
+
+      channel = supabase
+        .channel(`layout_user_${user.id}`)
+        .on(
+          "postgres_changes",
+          { event: "*", schema: "public", table: "users", filter: `id=eq.${user.id}` },
+          () => { fetchUserData(); }
+        )
+        .on(
+          "postgres_changes",
+          { event: "*", schema: "public", table: "user_roles", filter: `user_id=eq.${user.id}` },
+          () => { fetchUserData(); }
+        )
+        .on(
+          "broadcast",
+          { event: "role_updated" },
+          () => { fetchUserData(); }
+        )
+        .subscribe();
+
+      // Fallback/Immediate update for local profile changes
+      window.addEventListener("user_profile_updated", fetchUserData);
+    };
+
+    init();
+
+    return () => {
+      isMounted = false;
+      window.removeEventListener("user_profile_updated", fetchUserData);
+      if (channel) {
+        supabase.removeChannel(channel);
+      }
+    };
   }, [supabase]);
 
   const handleLogout = async () => {
@@ -99,9 +144,10 @@ export default function DashboardLayout({
   // Menu điều hướng — ẩn "Lịch sử thi" nếu không phải learner
   const navigation = [
     { name: "Tổng quan", href: "/dashboard", icon: LayoutDashboard, roles: ["admin", "teacher", "learner", "user"] },
-    { name: "Tài liệu của tôi", href: "/documents", icon: Files, roles: ["admin", "teacher", "learner", "user"] },
-    { name: "Bộ câu hỏi", href: "/quizzes", icon: BookOpen, roles: ["admin", "teacher", "learner", "user"] },
+    { name: "Tài liệu của tôi", href: "/documents", icon: Files, roles: ["teacher", "learner", "user"] },
+    { name: "Bộ câu hỏi", href: "/quizzes", icon: BookOpen, roles: ["teacher", "learner"] },
     { name: "Lịch sử thi", href: "/history", icon: History, roles: ["learner"] },
+    { name: "Kết quả thi", href: "/teacher-results", icon: BarChart, roles: ["teacher", "admin"] },
     { name: "Hồ sơ", href: "/profile", icon: UserIcon, roles: ["admin", "teacher", "learner", "user"] },
   ].filter((item) => item.roles.includes(userRole));
 
@@ -131,12 +177,15 @@ export default function DashboardLayout({
             >
               QuizGen
             </Link>
-            <Link
-              href="/documents/upload"
-              className="w-full py-3 mb-2 rounded-xl flex items-center justify-center gap-2 font-bold transition-all shadow-sm bg-blue-600 hover:bg-blue-700 text-white shadow-blue-500/30 hover:shadow-lg"
-            >
-              <PlusCircle size={20} /> MỚI
-            </Link>
+            {/* Nút MỚI: ẩn với admin (admin dùng trang /admin riêng) */}
+            {userRole !== "admin" && (
+              <Link
+                href="/documents/upload"
+                className="w-full py-3 mb-2 rounded-xl flex items-center justify-center gap-2 font-bold transition-all shadow-sm bg-blue-600 hover:bg-blue-700 text-white shadow-blue-500/30 hover:shadow-lg"
+              >
+                <PlusCircle size={20} /> MỚI
+              </Link>
+            )}
           </div>
 
           <nav className="flex-1 overflow-y-auto p-4 space-y-2">
@@ -239,5 +288,17 @@ export default function DashboardLayout({
         </div>
       </main>
     </div>
+  );
+}
+
+export default function DashboardLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
+  return (
+    <Suspense fallback={<div className="flex h-screen items-center justify-center bg-gray-50"><div className="animate-pulse text-gray-400">Đang tải...</div></div>}>
+      <DashboardLayoutContent>{children}</DashboardLayoutContent>
+    </Suspense>
   );
 }

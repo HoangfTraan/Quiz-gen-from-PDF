@@ -77,13 +77,22 @@ export async function updateSession(request: NextRequest) {
     }
   }
 
-  // ── Bảo vệ /history và /attempts/*: chỉ learner ──
-  const isLearnerRoute =
-    url.pathname.startsWith("/history") ||
-    url.pathname.startsWith("/attempts");
+  // ── Chặn admin vào route của user dashboard → đưa thẳng về /admin ──
+  if (user && isDashboardRoute) {
+    const { data: dbUser } = await supabase
+      .from("users")
+      .select("role")
+      .eq("id", user.id)
+      .single();
+    if (dbUser?.role === "admin") {
+      url.pathname = "/admin";
+      return NextResponse.redirect(url);
+    }
+  }
 
-  if (user && isLearnerRoute) {
-    // Kiểm tra có role learner trong user_roles không
+  // ── Bảo vệ /history: chỉ learner ──
+  // ── /attempts/*: cho phép cả learner và teacher (giáo viên xem kết quả học viên) ──
+  if (user && url.pathname.startsWith("/history")) {
     const { data: learnerRole } = await supabase
       .from("user_roles")
       .select("id, roles!inner(name)")
@@ -92,7 +101,21 @@ export async function updateSession(request: NextRequest) {
       .maybeSingle();
 
     if (!learnerRole) {
-      // Không phải learner → về dashboard với thông báo
+      url.pathname = "/dashboard";
+      url.searchParams.set("error", "learner_only");
+      return NextResponse.redirect(url);
+    }
+  }
+
+  if (user && url.pathname.startsWith("/attempts")) {
+    // Cho phép learner hoặc teacher truy cập
+    const { data: allowedRoles } = await supabase
+      .from("user_roles")
+      .select("id, roles!inner(name)")
+      .eq("user_id", user.id)
+      .in("roles.name", ["learner", "teacher"]);
+
+    if (!allowedRoles || allowedRoles.length === 0) {
       url.pathname = "/dashboard";
       url.searchParams.set("error", "learner_only");
       return NextResponse.redirect(url);

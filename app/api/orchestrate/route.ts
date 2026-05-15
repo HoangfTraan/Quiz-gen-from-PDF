@@ -166,6 +166,7 @@ async function processDocument(documentId: string, accessToken: string, refreshT
                 .select('document_chunk_id')
                 .eq('quiz_id', qId);
             const chunksWithQuestions = new Set(existingQuizQs?.map(q => q.document_chunk_id).filter(Boolean));
+            totalInserted = existingQuizQs?.length || 0;
 
             for (let i = 0; i < chunksToProcess.length; i++) {
                 // Check cancel
@@ -213,6 +214,11 @@ ${chunksToProcess[i].content}
                             prompt,
                             'Bạn là một chuyên gia giáo dục và thầy giáo ra đề đánh giá năng lực chuyên nghiệp. Phải gán đúng mức độ Bloom Taxonomy cho mỗi câu hỏi.'
                         );
+
+                        // Đảm bảo AI không sinh dư số lượng câu hỏi cần thiết
+                        if (aiData.questions && aiData.questions.length > remaining) {
+                            aiData.questions = aiData.questions.slice(0, remaining);
+                        }
 
                         const BLOOM_LEVELS = ["Nhớ", "Hiểu", "Vận dụng", "Phân tích", "Đánh giá", "Sáng tạo"];
                         const guessBloomLevel = (text: string, explanation: string) => {
@@ -294,7 +300,6 @@ ${chunksToProcess[i].content}
                         // Otherwise (AI error), skip this chunk and continue
                     }
                 } else {
-                    totalInserted++;
                     console.log(`[Orchestrate ${documentId}] Chunk ${i+1}/${chunksToProcess.length}: already generated, skip`);
                 }
             }

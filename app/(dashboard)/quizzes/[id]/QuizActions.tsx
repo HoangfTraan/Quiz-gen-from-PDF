@@ -1,30 +1,63 @@
 "use client";
 
-import { Trash2, CheckCircle, Save, Loader2 } from "lucide-react";
+import { Trash2, CheckCircle, Save, Loader2, Send, FileEdit } from "lucide-react";
 import { useState } from "react";
-import { createClient } from "@/utils/supabase/client";
 import { useRouter } from "next/navigation";
 import ConfirmModal from "@/components/ConfirmModal";
 
-export default function QuizActions({ quizId, initialStatus }: { quizId: string, initialStatus: string }) {
+interface QuizActionsProps {
+  quizId: string;
+  initialStatus: string;
+  questionCount: number;
+}
+
+export default function QuizActions({ quizId, initialStatus, questionCount }: QuizActionsProps) {
   const [status, setStatus] = useState(initialStatus);
+  const [isSaving, setIsSaving] = useState(false);
   const [isPublishing, setIsPublishing] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   
-  const supabase = createClient();
   const router = useRouter();
 
+  const updateStatus = async (newStatus: "draft" | "published") => {
+    const res = await fetch(`/api/quizzes/${quizId}/status`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ status: newStatus }),
+    });
+    if (!res.ok) {
+      const data = await res.json();
+      throw new Error(data.error || "Lỗi không xác định");
+    }
+    return res.json();
+  };
+
+  const handleSaveDraft = async () => {
+    if (status === "draft") return;
+    setIsSaving(true);
+    try {
+      await updateStatus("draft");
+      setStatus("draft");
+      router.refresh();
+    } catch (err: any) {
+      console.error(err);
+      alert(err.message || "Không thể chuyển về bản nháp!");
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
   const handlePublish = async () => {
-    if (status === 'published') return;
+    if (status === "published") return;
     setIsPublishing(true);
     try {
-      await supabase.from('quizzes').update({ status: 'published' }).eq('id', quizId);
-      setStatus('published');
+      await updateStatus("published");
+      setStatus("published");
       router.refresh();
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
-      alert('Không thể lưu bộ đề!');
+      alert(err.message || "Không thể xuất bản bộ đề!");
     } finally {
       setIsPublishing(false);
     }
@@ -33,20 +66,27 @@ export default function QuizActions({ quizId, initialStatus }: { quizId: string,
   const executeDelete = async () => {
     setIsDeleting(true);
     try {
-      // Bảng questions và options sẽ tự động xóa nếu thiết lập CASCADE
-      const { error } = await supabase.from('quizzes').delete().eq('id', quizId);
+      // Import supabase client for delete (cascade sẽ tự xóa questions/options)
+      const { createClient } = await import("@/utils/supabase/client");
+      const supabase = createClient();
+      const { error } = await supabase.from("quizzes").delete().eq("id", quizId);
       if (error) throw error;
       
-      router.push('/quizzes');
+      router.push("/quizzes");
     } catch (err) {
       console.error(err);
-      alert('Không thể xóa bộ đề!');
+      alert("Không thể xóa bộ đề!");
       setIsDeleting(false);
     }
   };
 
+  const isDraft = status === "draft";
+  const isPublished = status === "published";
+  const hasQuestions = questionCount > 0;
+
   return (
     <>
+      {/* Nút Xóa bộ đề */}
       <button 
         onClick={() => setShowDeleteModal(true)}
         disabled={isDeleting}
@@ -54,16 +94,51 @@ export default function QuizActions({ quizId, initialStatus }: { quizId: string,
       >
         {isDeleting ? <Loader2 size={16} className="animate-spin" /> : <Trash2 size={16} />} Xóa bộ đề
       </button>
-      
+
+      {/* Nút Lưu nháp — active khi đang published, cho phép unpublish */}
+      <button 
+        onClick={handleSaveDraft}
+        disabled={isDraft || isSaving}
+        className={`px-4 py-2 text-sm font-bold rounded-lg flex items-center gap-2 transition-all disabled:opacity-50 ${
+          isDraft
+            ? "bg-gray-100 text-gray-500 border border-gray-200 cursor-default"
+            : "bg-amber-50 text-amber-700 border border-amber-200 hover:bg-amber-100 cursor-pointer"
+        }`}
+        title={isDraft ? "Bộ đề đang ở trạng thái bản nháp" : "Thu hồi bộ đề về bản nháp"}
+      >
+        {isSaving ? (
+          <Loader2 size={16} className="animate-spin" />
+        ) : isDraft ? (
+          <FileEdit size={16} />
+        ) : (
+          <Save size={16} />
+        )}
+        {isDraft ? "Bản nháp" : "Lưu nháp"}
+      </button>
+
+      {/* Nút Xuất bản — active khi đang draft, disabled nếu không có câu hỏi */}
       <button 
         onClick={handlePublish}
-        disabled={status === 'published' || isPublishing}
-        className={`${status === 'published' ? 'bg-green-100 text-green-800 cursor-default shadow-none border border-green-200' : 'bg-green-600 hover:bg-green-700 text-white cursor-pointer shadow-lg shadow-green-200'} px-4 py-2 text-sm font-bold rounded-lg flex items-center gap-2 transition-colors disabled:opacity-50`}
+        disabled={isPublished || isPublishing || !hasQuestions}
+        className={`px-4 py-2 text-sm font-bold rounded-lg flex items-center gap-2 transition-all disabled:opacity-50 ${
+          isPublished
+            ? "bg-green-100 text-green-800 border border-green-200 cursor-default shadow-none"
+            : hasQuestions
+              ? "bg-green-600 hover:bg-green-700 text-white cursor-pointer shadow-lg shadow-green-200"
+              : "bg-gray-100 text-gray-400 border border-gray-200 cursor-not-allowed"
+        }`}
+        title={
+          isPublished
+            ? "Bộ đề đã được xuất bản"
+            : !hasQuestions
+              ? "Không thể xuất bản bộ đề chưa có câu hỏi"
+              : "Xuất bản bộ đề cho người học"
+        }
       >
-        {status === 'published' ? (
-          <><CheckCircle size={16} /> Đã lưu</>
+        {isPublished ? (
+          <><CheckCircle size={16} /> Đã xuất bản</>
         ) : (
-          <>{isPublishing ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />} Lưu</>
+          <>{isPublishing ? <Loader2 size={16} className="animate-spin" /> : <Send size={16} />} Xuất bản</>
         )}
       </button>
 

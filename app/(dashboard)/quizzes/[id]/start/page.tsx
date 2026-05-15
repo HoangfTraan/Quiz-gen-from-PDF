@@ -3,7 +3,7 @@
 import { useState, useEffect, use } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, Loader2, PlayCircle, RotateCcw, ShieldOff } from "lucide-react";
+import { ArrowLeft, Loader2, PlayCircle, RotateCcw, ShieldOff, CheckCircle } from "lucide-react";
 import { createClient } from "@/utils/supabase/client";
 
 export default function ExamPage({ params }: { params: Promise<{ id: string }> }) {
@@ -15,6 +15,8 @@ export default function ExamPage({ params }: { params: Promise<{ id: string }> }
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [hasAccess, setHasAccess] = useState<boolean | null>(null);
+  const [quizNotPublished, setQuizNotPublished] = useState(false);
+  const [alreadyAttempted, setAlreadyAttempted] = useState<{attemptId: string} | null>(null);
   const [selectedAnswers, setSelectedAnswers] = useState<Record<string, string>>({}); // question_id -> option_id
   const [filter, setFilter] = useState("all");
 
@@ -48,8 +50,40 @@ export default function ExamPage({ params }: { params: Promise<{ id: string }> }
         .maybeSingle();
       setHasAccess(!!learnerRole);
 
-      // 2. Load questions (chỉ cần load nếu có quyền)
+      // 2. Check quiz status: chỉ cho làm bài khi đã xuất bản
       if (learnerRole) {
+        const { data: quiz } = await supabase
+          .from('quizzes')
+          .select('status, user_id')
+          .eq('id', id)
+          .single();
+
+        // Cho phép làm bài nếu đã xuất bản HOẶC đây là bộ đề do chính người học tạo
+        if (!quiz || (quiz.status !== 'published' && quiz.user_id !== user.id)) {
+          setQuizNotPublished(true);
+          setLoading(false);
+          return;
+        }
+
+        // 3. Kiểm tra đã làm bài chưa (chỉ áp dụng cho bộ đề published của giáo viên khác)
+        const isTeacherQuiz = quiz.status === 'published' && quiz.user_id !== user.id;
+        if (isTeacherQuiz) {
+          const { data: existingAttempt } = await supabase
+            .from('quiz_attempts')
+            .select('id')
+            .eq('quiz_id', id)
+            .eq('user_id', user.id)
+            .limit(1)
+            .maybeSingle();
+
+          if (existingAttempt) {
+            setAlreadyAttempted({ attemptId: existingAttempt.id });
+            setLoading(false);
+            return;
+          }
+        }
+
+        // 4. Load questions
         const { data } = await supabase
           .from('questions')
           .select(`id, question_text, explanation,
@@ -143,11 +177,50 @@ export default function ExamPage({ params }: { params: Promise<{ id: string }> }
     );
   }
 
+  // Chặn truy cập nếu bộ đề chưa xuất bản
+  // Chặn nếu đã làm bài rồi (bộ đề published từ giáo viên)
+  if (alreadyAttempted) {
+    return (
+      <div className="max-w-lg mx-auto mt-20 p-10 bg-white rounded-2xl border border-green-100 shadow text-center">
+        <CheckCircle size={48} className="text-green-500 mx-auto mb-4" />
+        <h2 className="text-xl font-extrabold text-gray-800 mb-2">Bạn đã hoàn thành bài thi này</h2>
+        <p className="text-gray-500 mb-6">
+          Bộ đề này chỉ được làm <strong>một lần duy nhất</strong>.<br />
+          Bạn có thể xem lại kết quả bài làm của mình.
+        </p>
+        <div className="flex flex-col sm:flex-row gap-3 justify-center">
+          <Link href={`/attempts/${alreadyAttempted.attemptId}/result`} className="px-6 py-2.5 bg-blue-600 text-white font-bold rounded-xl hover:bg-blue-700 transition-colors">
+            Xem kết quả
+          </Link>
+          <Link href="/quizzes" className="px-6 py-2.5 bg-gray-100 text-gray-700 font-bold rounded-xl hover:bg-gray-200 transition-colors">
+            Về danh sách bộ đề
+          </Link>
+        </div>
+      </div>
+    );
+  }
+
+  if (quizNotPublished) {
+    return (
+      <div className="max-w-lg mx-auto mt-20 p-10 bg-white rounded-2xl border border-orange-100 shadow text-center">
+        <ShieldOff size={48} className="text-orange-400 mx-auto mb-4" />
+        <h2 className="text-xl font-extrabold text-gray-800 mb-2">Bộ đề chưa được xuất bản</h2>
+        <p className="text-gray-500 mb-6">
+          Bộ đề này chưa được giáo viên xuất bản.<br />
+          Vui lòng liên hệ giáo viên của bạn để làm bài thi này.
+        </p>
+        <Link href="/quizzes" className="px-6 py-2.5 bg-blue-600 text-white font-bold rounded-xl hover:bg-blue-700 transition-colors">
+          Về danh sách bộ đề
+        </Link>
+      </div>
+    );
+  }
+
   if (questions.length === 0) {
     return (
       <div className="max-w-4xl mx-auto mt-10 p-8 bg-white border border-gray-100 rounded-xl text-center">
         <h2 className="text-xl font-bold text-gray-800 mb-4">Không có câu hỏi nào</h2>
-        <Link href={`/quizzes/${id}`} className="text-blue-600 font-medium hover:underline">← Quay lại danh sách</Link>
+        <Link href="/quizzes" className="text-blue-600 font-medium hover:underline">← Quay lại danh sách</Link>
       </div>
     );
   }
@@ -155,7 +228,7 @@ export default function ExamPage({ params }: { params: Promise<{ id: string }> }
   return (
     <div className="animate-page-fade max-w-4xl mx-auto px-4 pb-12">
       <div className="flex items-center justify-between bg-white p-4 rounded-xl shadow sticky top-6 z-10 mb-8 border border-gray-100">
-        <Link href={`/quizzes/${id}`} className="text-gray-500 hover:text-gray-800 font-medium shrink-0 flex items-center gap-2">
+        <Link href="/quizzes" className="text-gray-500 hover:text-gray-800 font-medium shrink-0 flex items-center gap-2">
            <ArrowLeft size={16} /> Thoát
         </Link>
         <div className="font-extrabold text-gray-800 flex items-center gap-2">

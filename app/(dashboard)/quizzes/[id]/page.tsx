@@ -1,11 +1,12 @@
 import Link from "next/link";
-import { ArrowLeft, Play } from "lucide-react";
+import { ArrowLeft, ShieldOff } from "lucide-react";
 import QuestionList from "./QuestionList";
 import QuizActions from "./QuizActions";
+import QuizTitleEditor from "./QuizTitleEditor";
 import { createClient } from "@/utils/supabase/server";
 import { notFound, redirect } from "next/navigation";
 import { getUserRole } from "@/utils/rbac-server";
-import { canManageQuiz, canTakeQuiz } from "@/utils/rbac";
+import { canAuthorQuiz, canTakePublishedQuiz } from "@/utils/rbac";
 
 export default async function QuizDetailsPage({
   params,
@@ -19,15 +20,33 @@ export default async function QuizDetailsPage({
   const {
     data: { user },
   } = await supabase.auth.getUser();
-  const role = user ? await getUserRole(user.id) : "user";
+  if (!user) redirect("/login");
 
-  // Người học không được xem trước đề và đáp án, đưa vào trang làm bài thi luôn
-  if (role === "learner") {
-    redirect(`/quizzes/${id}/start`);
+  const role = await getUserRole(user.id);
+
+  const isAuthor = canAuthorQuiz(role);
+  const isLearner = canTakePublishedQuiz(role);
+
+  // Chỉ teacher và learner được truy cập
+  if (!isAuthor && !isLearner) {
+    return (
+      <div className="max-w-lg mx-auto mt-20 p-10 bg-white rounded-2xl border border-amber-100 shadow text-center">
+        <ShieldOff size={48} className="text-amber-400 mx-auto mb-4" />
+        <h2 className="text-xl font-extrabold text-gray-800 mb-2">Không có quyền truy cập</h2>
+        <p className="text-gray-500 mb-6">
+          Chức năng này chỉ dành cho tài khoản <strong>Giáo viên</strong> hoặc <strong>Người học</strong>.
+        </p>
+        <Link href="/dashboard" className="px-6 py-2.5 bg-blue-600 text-white font-bold rounded-xl hover:bg-blue-700 transition-colors">
+          Về trang chủ
+        </Link>
+      </div>
+    );
   }
 
-  const canManage = canManageQuiz(role);
-  const canTake = canTakeQuiz(role);
+  // Người học redirect thẳng vào trang làm bài thi
+  if (isLearner) {
+    redirect(`/quizzes/${id}/start`);
+  }
 
   // Song song hóa việc lấy thông tin bộ đề và danh sách câu hỏi kèm đáp án
   const [quizResult, questionsResult] = await Promise.all([
@@ -54,7 +73,24 @@ export default async function QuizDetailsPage({
   const quiz = quizResult.data;
   if (!quiz) return notFound();
 
+  // Kiểm tra quyền sở hữu: chỉ teacher owner mới được xem chi tiết
+  if (quiz.user_id !== user.id) {
+    return (
+      <div className="max-w-lg mx-auto mt-20 p-10 bg-white rounded-2xl border border-amber-100 shadow text-center">
+        <ShieldOff size={48} className="text-amber-400 mx-auto mb-4" />
+        <h2 className="text-xl font-extrabold text-gray-800 mb-2">Không có quyền truy cập</h2>
+        <p className="text-gray-500 mb-6">
+          Bạn không phải chủ sở hữu bộ đề này.
+        </p>
+        <Link href="/quizzes" className="px-6 py-2.5 bg-blue-600 text-white font-bold rounded-xl hover:bg-blue-700 transition-colors">
+          Về danh sách bộ đề
+        </Link>
+      </div>
+    );
+  }
+
   const questions = questionsResult.data;
+  const questionCount = questions?.length || 0;
 
   return (
     <div className="animate-slide-in-right max-w-4xl mx-auto px-4 pb-20">
@@ -66,38 +102,23 @@ export default async function QuizDetailsPage({
           <ArrowLeft size={16} /> Bộ câu hỏi
         </Link>
         <div className="flex flex-wrap gap-2">
-
-          {/* Xóa / Publish: chỉ teacher/admin */}
-          {canManage && (
-            <QuizActions quizId={id} initialStatus={quiz.status} />
-          )}
-
-          {/* Làm bài: chỉ learner */}
-          {canTake && (
-            <Link
-              href={`/quizzes/${id}/start`}
-              className="bg-orange-500 hover:bg-orange-600 text-white px-4 py-2 text-sm font-bold rounded-lg flex items-center gap-2 shadow-sm transition-transform hover:scale-105"
-            >
-              <Play size={16} /> Làm bài thi
-            </Link>
-          )}
-
-
+          {/* Xóa / Lưu nháp / Xuất bản: chỉ teacher owner */}
+          <QuizActions quizId={id} initialStatus={quiz.status} questionCount={questionCount} />
         </div>
       </div>
 
       <div className="mb-8">
-        <h1 className="text-2xl font-extrabold text-gray-800">{quiz.title}</h1>
+        <QuizTitleEditor quizId={id} initialTitle={quiz.title} canEdit={isAuthor} />
         <p className="text-gray-500 mt-2">
           ID: #{quiz.id.slice(0, 8)}...{" "}
           {quiz.documents
             ? `Dựa trên tài liệu "${quiz.documents.title}"`
             : "Đề thi độc lập"}{" "}
-          • Gồm {questions?.length || 0} câu hỏi
+          • Gồm {questionCount} câu hỏi
         </p>
       </div>
 
-      {(!questions || questions.length === 0) && (
+      {questionCount === 0 && (
         <div className="text-center p-12 bg-white rounded-2xl border border-gray-100 text-gray-500 font-medium mb-6">
           Chưa có câu hỏi nào được tích hợp trong bộ đề. Bạn có thể tự thêm
           thủ công bằng nút bên dưới.
@@ -108,7 +129,7 @@ export default async function QuizDetailsPage({
         <QuestionList
           initialQuestions={questions}
           quizId={id}
-          canEdit={canManage}
+          canEdit={isAuthor}
         />
       )}
     </div>

@@ -7,8 +7,18 @@ export function canManageQuiz(role: AppRole): boolean {
   return role === "admin" || role === "teacher";
 }
 
+/** Chỉ teacher mới được tạo, chỉnh sửa, lưu nháp, xuất bản bộ đề */
+export function canAuthorQuiz(role: AppRole): boolean {
+  return role === "teacher";
+}
+
 /** Chỉ learner mới được làm bài */
 export function canTakeQuiz(role: AppRole): boolean {
+  return role === "learner";
+}
+
+/** Chỉ learner mới được xem và làm bộ đề đã xuất bản */
+export function canTakePublishedQuiz(role: AppRole): boolean {
   return role === "learner";
 }
 
