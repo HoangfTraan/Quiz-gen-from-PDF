@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/utils/supabase/server';
 import pdfParse from 'pdf-parse';
-import { generateJSON } from '@/utils/ai/provider';
+import { generateJSON, generateText } from '@/utils/ai/provider';
 
 export async function POST(request: Request) {
   try {
@@ -36,8 +36,14 @@ export async function POST(request: Request) {
 
         if (!rawText.trim()) throw new Error('No text extracted');
 
-        // Clean Text (Loại bỏ khoảng trắng thừa, ký tự Null, fix dấu)
-        let cleanedText = rawText.replace(/\u0000/g, '').replace(/[\r\n]{3,}/g, '\n\n').trim();
+        // Clean Text (Loại bỏ khoảng trắng thừa, ký tự Null, fix dấu, chuẩn hóa NFC và sửa lỗi font chữ Ƣ/ƣ)
+        let cleanedText = rawText
+          .normalize('NFC')
+          .replace(/Ƣ/g, 'Ư')
+          .replace(/ƣ/g, 'ư')
+          .replace(/\u0000/g, '')
+          .replace(/[\r\n]{3,}/g, '\n\n')
+          .trim();
 
         // Xóa bản ghi cũ nếu có để chạy lại từ đầu
         await supabase.from('document_contents').delete().eq('document_id', documentId);
@@ -236,6 +242,76 @@ ${chunk.content}
         await supabase.from('documents').update({ status: 'completed' }).eq('id', documentId);
 
         return NextResponse.json({ success: true, message: "Validating completed (AI scoring implemented soon)" });
+      }
+
+      // ==========================================
+      // AI TASK 6: DETECT CHAPTERS (NHẬN DIỆN CHƯƠNG)
+      // ==========================================
+      case 'detect-chapters': {
+        const { data: content } = await supabase
+          .from('document_contents')
+          .select('cleaned_text')
+          .eq('document_id', documentId)
+          .single();
+        if (!content || !content.cleaned_text) throw new Error('Cleaned text not found. Run extract first.');
+
+        // Dynamic import to avoid loading detector when not needed
+        const { detectChapters, isDefaultChapter } = await import('@/utils/chapters/detector');
+        const chapters = await detectChapters(content.cleaned_text);
+        const isDefault = isDefaultChapter(chapters);
+
+        // Save chapters to DB with concurrent AI summarization
+        const chaptersToInsert = await Promise.all(chapters.map(async (ch) => {
+          let summary = '';
+          const previewText = ch.content ? ch.content.substring(0, 2500).trim() : '';
+
+          if (previewText) {
+            const prompt = `Viết một đoạn tóm tắt ngắn gọn và súc tích (khoảng 2-3 câu bằng Tiếng Việt) phản ánh nội dung chính của chương sau đây. Không thêm bất kỳ lời bình luận hay giải thích nào khác.\n\nTên chương: ${ch.title}\n\nNội dung chương:\n"""\n${previewText}\n"""`;
+            try {
+              const { text } = await generateText(
+                prompt,
+                'Bạn là một trợ lý giáo dục chuyên nghiệp. Viết tóm tắt chương ngắn gọn, súc tích bằng Tiếng Việt.'
+              );
+              summary = text.trim();
+            } catch (err) {
+              console.error(`[Process/${documentId}] Failed to generate summary for chapter ${ch.index}:`, err);
+              // Fallback to text excerpt
+              summary = ch.content
+                ? ch.content.substring(0, 180).replace(/[\r\n]+/g, ' ').trim() + '...'
+                : '';
+            }
+          } else {
+            summary = 'Không có nội dung để tóm tắt.';
+          }
+
+          return {
+            document_id: documentId,
+            chapter_index: ch.index,
+            title: ch.title,
+            content: ch.content,
+            summary: summary,
+            start_position: ch.startPosition,
+            end_position: ch.endPosition,
+            detection_method: ch.detectionMethod,
+            metadata: {
+              ...(ch.metadata || {}),
+              ...(isDefault ? { is_default: true, notice: 'Tài liệu không có cấu trúc chương rõ ràng' } : {})
+            }
+          };
+        }));
+
+        await supabase.from('chapters').delete().eq('document_id', documentId);
+        await supabase.from('chapters').insert(chaptersToInsert);
+
+        // Update document status
+        await supabase.from('documents').update({ status: 'analyzed' }).eq('id', documentId);
+
+        return NextResponse.json({
+          success: true,
+          totalChapters: chapters.length,
+          isDefault,
+          chapters: chapters.map(ch => ({ index: ch.index, title: ch.title, method: ch.detectionMethod }))
+        });
       }
 
       default:

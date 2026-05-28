@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { FileText, ArrowLeft, RefreshCw, Play } from "lucide-react";
+import { FileText, ArrowLeft, RefreshCw, Play, BookOpen } from "lucide-react";
 import { createClient } from "@/utils/supabase/server";
 import { notFound } from "next/navigation";
 import KeywordEditor from "./KeywordEditor";
@@ -16,7 +16,7 @@ export default async function DocumentDetailsPage({ params }: { params: Promise<
   if (!user) return notFound();
 
   // Song song hóa toàn bộ truy vấn dữ liệu bằng Promise.all để tối ưu hóa thời gian phản hồi
-  const [role, docResult, contentResult, latestQuizResult] = await Promise.all([
+  const [role, docResult, contentResult, latestQuizResult, chaptersResult] = await Promise.all([
     getUserRole(user.id),
     supabase.from('documents').select('*, subjects(name)').eq('id', id).single(),
     supabase.from('document_contents').select('summary, keywords').eq('document_id', id).single(),
@@ -26,7 +26,12 @@ export default async function DocumentDetailsPage({ params }: { params: Promise<
       .eq('document_id', id)
       .order('created_at', { ascending: false })
       .limit(1)
-      .maybeSingle()
+      .maybeSingle(),
+    supabase
+      .from('chapters')
+      .select('id, chapter_index, title, detection_method, start_page, end_page')
+      .eq('document_id', id)
+      .order('chapter_index', { ascending: true })
   ]);
 
   const doc = docResult.data;
@@ -35,6 +40,7 @@ export default async function DocumentDetailsPage({ params }: { params: Promise<
   const canTake = canTakeQuiz(role);
   const content = contentResult.data;
   const latestQuiz = latestQuizResult.data;
+  const chapters = chaptersResult.data || [];
 
   const learnerHref = latestQuiz ? `/quizzes/${latestQuiz.id}/start` : `/documents/${id}/analysis`;
   const teacherHref = latestQuiz ? `/quizzes/${latestQuiz.id}` : `/documents/${id}/analysis`;
@@ -59,6 +65,7 @@ export default async function DocumentDetailsPage({ params }: { params: Promise<
                   'bg-yellow-100 text-yellow-700'
               }`}>
               {doc.status === 'completed' ? 'Hoàn thành' :
+                doc.status === 'analyzed' ? 'Đã phân tích' :
                 doc.status === 'failed' ? 'Thất bại' : 'Đang xử lý...'}
             </span>
           </p>
@@ -81,6 +88,33 @@ export default async function DocumentDetailsPage({ params }: { params: Promise<
         <SummaryEditor documentId={id} initialSummary={content?.summary} status={doc.status} />
 
         <KeywordEditor documentId={id} initialKeywords={content?.keywords} />
+
+        {/* Danh sách chương đã phát hiện */}
+        {chapters.length > 0 && (
+          <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+            <h2 className="text-lg font-extrabold text-gray-800 flex items-center gap-2 mb-4">
+              <BookOpen size={20} className="text-emerald-600" /> Cấu trúc chương ({chapters.length})
+            </h2>
+            <div className="space-y-2">
+              {chapters.map((ch: any) => (
+                <div key={ch.id} className="flex items-center gap-3 px-4 py-2.5 bg-gray-50 rounded-lg border border-gray-100">
+                  <span className="text-sm font-bold text-gray-400 w-8">{ch.chapter_index}.</span>
+                  <span className="flex-1 text-sm font-bold text-gray-800">{ch.title}</span>
+                  {ch.start_page && (
+                    <span className="text-xs text-gray-400">Trang {ch.start_page}{ch.end_page ? `-${ch.end_page}` : ''}</span>
+                  )}
+                  <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold uppercase tracking-wider ${
+                    ch.detection_method === 'regex' ? 'bg-green-100 text-green-700' :
+                    ch.detection_method === 'ai' ? 'bg-purple-100 text-purple-700' :
+                    'bg-gray-100 text-gray-500'
+                  }`}>
+                    {ch.detection_method}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

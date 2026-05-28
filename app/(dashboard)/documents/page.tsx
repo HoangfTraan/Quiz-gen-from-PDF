@@ -163,7 +163,7 @@ export default function DocumentsPage() {
                           <input type="checkbox" checked={selectedIds.has(doc.id)} onChange={() => toggleSelect(doc.id)} className="w-4 h-4 text-blue-600 rounded cursor-pointer" />
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
-                          <Link href={doc.status === 'processing' || doc.status === 'uploaded' ? `/documents/${doc.id}/analysis` : `/documents/${doc.id}`} className="flex items-center gap-2 font-bold text-gray-800 hover:text-blue-600 transition-colors">
+                          <Link href={doc.status === 'processing' || doc.status === 'uploaded' || doc.status === 'analyzed' ? `/documents/${doc.id}/analysis` : `/documents/${doc.id}`} className="flex items-center gap-2 font-bold text-gray-800 hover:text-blue-600 transition-colors">
                             <FileText size={18} className="text-blue-500" />
                             {doc.title}
                           </Link>
@@ -173,9 +173,10 @@ export default function DocumentsPage() {
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
                           <span className={`px-2.5 py-1 inline-flex text-xs leading-5 font-black rounded-lg uppercase tracking-wider ${doc.status === 'completed' ? 'bg-green-100 text-green-800' :
-                              doc.status === 'failed' ? 'bg-red-100 text-red-800' : 'bg-yellow-100 text-yellow-800 animate-pulse'
+                              doc.status === 'failed' ? 'bg-red-100 text-red-800' :
+                              doc.status === 'analyzed' ? 'bg-blue-100 text-blue-800' : 'bg-yellow-100 text-yellow-800 animate-pulse'
                             }`}>
-                            {doc.status === 'completed' ? 'Hoàn thành' : doc.status === 'failed' ? 'Thất bại' : 'Đang xử lý'}
+                            {doc.status === 'completed' ? 'Hoàn thành' : doc.status === 'failed' ? 'Thất bại' : doc.status === 'analyzed' ? 'Đã phân tích' : 'Đang xử lý'}
                           </span>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 font-medium">

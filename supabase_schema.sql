@@ -43,7 +43,8 @@ CREATE TABLE IF NOT EXISTS public.documents (
   file_path TEXT,
   file_type TEXT,
   file_size BIGINT,
-  status TEXT DEFAULT 'uploaded', -- 'uploaded', 'processing', 'completed', 'failed'
+  total_pages INTEGER, -- [MỚI] Tổng số trang PDF
+  status TEXT DEFAULT 'uploaded', -- 'uploaded', 'processing', 'analyzed'[MỚI], 'completed', 'failed'
   language TEXT DEFAULT 'vi',
   created_at TIMESTAMPTZ DEFAULT now(),
   updated_at TIMESTAMPTZ DEFAULT now()
@@ -69,10 +70,31 @@ CREATE TRIGGER update_document_contents_updated_at
 BEFORE UPDATE ON public.document_contents
 FOR EACH ROW EXECUTE PROCEDURE update_updated_at_func();
 
+-- [MỚI] 4b. chapters (Lớp trung gian: Document → Chapter → Chunk)
+-- Dùng để nhận diện cấu trúc tài liệu theo chương/phần/mục
+CREATE TABLE IF NOT EXISTS public.chapters (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  document_id UUID REFERENCES public.documents(id) ON DELETE CASCADE,
+  chapter_index INTEGER NOT NULL,
+  title TEXT NOT NULL,
+  content TEXT,
+  summary TEXT,
+  start_position INTEGER,
+  end_position INTEGER,
+  start_page INTEGER,
+  end_page INTEGER,
+  detection_method TEXT DEFAULT 'regex', -- 'regex' | 'ai' | 'default'
+  metadata JSONB,
+  created_at TIMESTAMPTZ DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_chapters_document_id ON public.chapters(document_id); -- [MỚI]
+
 -- 5. document_chunks
 CREATE TABLE IF NOT EXISTS public.document_chunks (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   document_id UUID REFERENCES public.documents(id) ON DELETE CASCADE,
+  chapter_id UUID REFERENCES public.chapters(id) ON DELETE SET NULL, -- [MỚI] Liên kết chunk → chương
   chunk_index INTEGER,
   title TEXT,
   content TEXT,

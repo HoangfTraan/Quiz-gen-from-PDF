@@ -138,7 +138,7 @@ async function callLocalAI(
       { role: 'user', content: prompt },
     ],
     // Tạm thời bỏ response_format vì một số phiên bản LM Studio báo lỗi 400 với 'json_object'
-    // Chúng ta sẽ dựa hoàn toàn vào System Prompt ("Trả về JSON chuẩn") để lấy kết quả
+    // Dựa hoàn toàn vào System Prompt ("Trả về JSON chuẩn") để lấy kết quả
   });
 
   const text = completion.choices[0]?.message?.content;
@@ -231,7 +231,7 @@ export async function generateJSON<T = any>(
   let data: T;
   
   // ==========================================
-  // CHÚ THÍCH: BẮT ĐẦU QUÁ TRÌNH CHUẨN HÓA JSON (JSON NORMALIZATION)
+  // BẮT ĐẦU QUÁ TRÌNH CHUẨN HÓA JSON (JSON NORMALIZATION)
   // Bước 1: Xóa bỏ cụm markdown ```json nếu model nhả rác (thường gặp ở local AI hoặc cấu hình yếu)
   // ==========================================
   if (content.startsWith('```')) {

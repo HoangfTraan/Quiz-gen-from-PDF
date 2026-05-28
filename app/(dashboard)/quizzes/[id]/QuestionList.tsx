@@ -18,12 +18,135 @@ const normalizeBloomLevel = (level?: string | null) => {
   return null;
 };
 
+const getTypeBadge = (qType: string) => {
+  const badges: Record<string, { text: string; css: string }> = {
+    mcq: { text: "Trắc nghiệm A/B/C/D", css: "bg-blue-50 text-blue-700 border-blue-200" },
+    true_false: { text: "Yes/No (True/False)", css: "bg-green-50 text-green-700 border-green-200" },
+    fill_blank: { text: "Điền vào chỗ trống", css: "bg-cyan-50 text-cyan-700 border-cyan-200" },
+    short_answer: { text: "Trả lời ngắn", css: "bg-purple-50 text-purple-700 border-purple-200" },
+    multi_select: { text: "Chọn nhiều đáp án đúng", css: "bg-amber-50 text-amber-700 border-amber-200" },
+    matching: { text: "Ghép đôi", css: "bg-emerald-50 text-emerald-700 border-emerald-200" }
+  };
+  return badges[qType] || badges.mcq;
+};
+
+const renderTeacherQuestionOptions = (q: any) => {
+  const qType = q.question_type || 'mcq';
+  const sortedOptions = [...(q.question_options || [])].sort((a: any, b: any) => (a.option_label || '').localeCompare(b.option_label || ''));
+
+  if (qType === 'fill_blank' || qType === 'short_answer') {
+    const correctOpt = sortedOptions.find(o => o.is_correct);
+    return (
+      <div className="p-4 bg-emerald-50 border border-emerald-100 rounded-xl">
+        <p className="text-sm font-bold text-emerald-800 flex items-center gap-1.5">
+          <CheckCircle size={16} /> Đáp án đúng:
+        </p>
+        <p className="text-sm font-semibold text-emerald-900 mt-1.5">{correctOpt?.option_text || 'Chưa cấu hình'}</p>
+      </div>
+    );
+  }
+
+  if (qType === 'matching') {
+    const pairs = sortedOptions.filter(o => o.option_label?.startsWith('pair_'));
+    return (
+      <div className="space-y-2.5">
+        <p className="text-sm font-bold text-emerald-800 flex items-center gap-1.5 mb-2">
+          <ListChecks size={16} /> Các cặp ghép đôi chính xác:
+        </p>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+          {pairs.map((opt) => {
+            let left = '';
+            let right = '';
+            try {
+              const parsed = JSON.parse(opt.option_text);
+              left = parsed.left;
+              right = parsed.right;
+            } catch {
+              return (
+                <div key={opt.id} className="p-3 bg-red-50 border border-red-100 rounded-xl text-xs text-red-700 font-medium">
+                  Lỗi giải mã cặp ghép: {opt.option_text}
+                </div>
+              );
+            }
+            return (
+              <div key={opt.id} className="p-3 bg-emerald-50/35 border border-emerald-100/50 rounded-xl flex items-center justify-between gap-3 text-sm">
+                <span className="font-extrabold text-emerald-900 bg-white px-2.5 py-1.5 rounded-lg border border-emerald-100 shadow-sm shrink-0">{left}</span>
+                <span className="text-emerald-500 font-bold">➔</span>
+                <span className="font-medium text-emerald-800 bg-white px-2.5 py-1.5 rounded-lg border border-emerald-100 shadow-sm flex-1 text-right">{right}</span>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    );
+  }
+
+  // mcq, true_false, multi_select
+  return (
+    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+      {sortedOptions?.map((opt: any) => (
+        <div key={opt.id} className={`p-3 rounded-lg border flex items-start gap-2 ${opt.is_correct ? 'bg-green-50 border-green-200 text-green-900 font-medium shadow-sm' : 'bg-gray-50 border-gray-100 text-gray-700'}`}>
+          <span className="font-bold flex-shrink-0">{opt.option_label}.</span>
+          <span>{opt.option_text}</span>
+          {opt.is_correct && <CheckCircle className="ml-auto flex-shrink-0 text-green-500" size={18} />}
+        </div>
+      ))}
+    </div>
+  );
+};
+
+const detectRealType = (q: any): string => {
+  const currentType = q.question_type || 'mcq';
+  const sortedOptions = q.question_options || [];
+
+  // 1. Kiểm tra matching: Có bất kỳ option_label nào bắt đầu bằng 'pair_'
+  const hasMatchingPairs = sortedOptions.some((o: any) => o.option_label?.startsWith('pair_'));
+  if (hasMatchingPairs) return 'matching';
+
+  // 2. Kiểm tra true_false: Có đúng 2 đáp án và nhãn/nội dung chứa Đúng/Sai (True/False)
+  if (sortedOptions.length === 2) {
+    const hasTrueFalseLabel = sortedOptions.some((o: any) => {
+      const text = (o.option_text || '').toLowerCase();
+      return text === 'đúng' || text === 'sai' || text === 'true' || text === 'false';
+    });
+    if (hasTrueFalseLabel) return 'true_false';
+  }
+
+  // 3. Kiểm tra multi_select: Có nhiều hơn 1 đáp án được đánh dấu is_correct
+  const correctCount = sortedOptions.filter((o: any) => o.is_correct).length;
+  if (correctCount > 1) return 'multi_select';
+
+  // 4. Kiểm tra fill_blank: Câu hỏi chứa ký tự điền trống ___
+  if (q.question_text?.includes('___')) return 'fill_blank';
+
+  // 5. Nếu cơ sở dữ liệu đã phân loại rõ ràng (ví dụ: short_answer) thì giữ nguyên
+  if (currentType === 'short_answer') return 'short_answer';
+  if (currentType === 'fill_blank') return 'fill_blank';
+
+  return currentType;
+};
+
 export default function QuestionList({ initialQuestions, quizId, canEdit = true }: { initialQuestions: any[], quizId: string, canEdit?: boolean }) {
-  const [questions, setQuestions] = useState(initialQuestions || []);
+  const [questions, setQuestions] = useState(() => {
+    return (initialQuestions || []).map(q => ({
+      ...q,
+      question_type: detectRealType(q)
+    }));
+  });
   const [editingId, setEditingId] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [editForm, setEditForm] = useState<any>(null);
   const [filter, setFilter] = useState("all");
+  const [typeFilter, setTypeFilter] = useState("all");
+
+  const typeLabels: Record<string, string> = {
+    mcq: "Trắc nghiệm A/B/C/D",
+    true_false: "Yes/No (True/False)",
+    fill_blank: "Điền vào chỗ trống",
+    short_answer: "Trả lời ngắn",
+    multi_select: "Chọn nhiều đáp án đúng",
+    matching: "Ghép đôi"
+  };
 
   const supabase = createClient();
   const router = useRouter();
@@ -203,6 +326,7 @@ export default function QuestionList({ initialQuestions, quizId, canEdit = true 
   };
 
   const uniqueDifficulties = Array.from(new Set(questions.map((q: any) => parseExplanation(q.explanation, q.difficulty).diff).filter(Boolean)));
+  const uniqueTypes = Array.from(new Set(questions.map((q: any) => q.question_type || 'mcq')));
 
   const activeQuestions = questions.filter(q => !['flagged', 'error'].includes(q.moderation_status));
   const hiddenQuestions = questions.filter(q => ['flagged', 'error'].includes(q.moderation_status));
@@ -210,37 +334,68 @@ export default function QuestionList({ initialQuestions, quizId, canEdit = true 
   return (
     <div className="space-y-6">
       {questions.length > 0 && (
-        <div className="flex flex-wrap items-center gap-2 mb-6 bg-gray-50 p-3 rounded-xl border border-gray-200">
-          <span className="text-sm font-bold text-gray-500 mr-2 uppercase tracking-tight">Bộ lọc Bloom:</span>
-          <button
-            onClick={() => setFilter("all")}
-            className={`px-3 py-1.5 rounded-lg text-xs font-black transition-all uppercase tracking-wider ${filter === "all" ? "bg-indigo-600 text-white shadow-md scale-105" : "bg-white text-gray-600 border border-gray-200 hover:bg-gray-100"}`}
-          >
-            Tất cả
-          </button>
-          {uniqueDifficulties.map((diff: any) => (
+        <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm space-y-4">
+          {/* Bloom Filter Row */}
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-xs font-black text-gray-400 uppercase tracking-widest mr-2 w-28 shrink-0">BỘ LỌC BLOOM:</span>
             <button
-              key={diff}
-              onClick={() => setFilter(diff.toLowerCase())}
-              className={`px-3 py-1.5 rounded-lg text-xs font-black transition-all uppercase tracking-wider ${filter === diff.toLowerCase() ? "bg-indigo-600 text-white shadow-md scale-105" : "bg-white text-gray-600 border border-gray-200 hover:bg-gray-100"}`}
+              onClick={() => setFilter("all")}
+              className={`px-3 py-1.5 rounded-lg text-xs font-black transition-all uppercase tracking-wider ${filter === "all" ? "bg-indigo-600 text-white shadow-md scale-105" : "bg-white text-gray-600 border border-gray-200 hover:bg-gray-100"}`}
             >
-              {diff}
+              TẤT CẢ
             </button>
-          ))}
-          {questions.some((q: any) => !parseExplanation(q.explanation).diff) && (
+            {uniqueDifficulties.map((diff: any) => (
+              <button
+                key={diff}
+                onClick={() => setFilter(diff.toLowerCase())}
+                className={`px-3 py-1.5 rounded-lg text-xs font-black transition-all uppercase tracking-wider ${filter === diff.toLowerCase() ? "bg-indigo-600 text-white shadow-md scale-105" : "bg-white text-gray-600 border border-gray-200 hover:bg-gray-100"}`}
+              >
+                {diff.toUpperCase()}
+              </button>
+            ))}
+            {questions.some((q: any) => !parseExplanation(q.explanation).diff) && (
+              <button
+                onClick={() => setFilter("none")}
+                className={`px-3 py-1.5 rounded-lg text-xs font-black transition-all uppercase tracking-wider ${filter === "none" ? "bg-gray-600 text-white shadow-md scale-105" : "bg-white text-gray-400 border border-gray-200 hover:bg-gray-100"}`}
+              >
+                CHƯA PHÂN LOẠI
+              </button>
+            )}
+          </div>
+
+          <div className="h-[1px] bg-gray-100" />
+
+          {/* Question Type Filter Row */}
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-xs font-black text-gray-400 uppercase tracking-widest mr-2 w-28 shrink-0">LOẠI CÂU HỎI:</span>
             <button
-              onClick={() => setFilter("none")}
-              className={`px-3 py-1.5 rounded-lg text-xs font-black transition-all uppercase tracking-wider ${filter === "none" ? "bg-gray-600 text-white shadow-md scale-105" : "bg-white text-gray-400 border border-gray-200 hover:bg-gray-100"}`}
+              onClick={() => setTypeFilter("all")}
+              className={`px-3 py-1.5 rounded-lg text-xs font-black transition-all uppercase tracking-wider ${typeFilter === "all" ? "bg-blue-600 text-white shadow-md scale-105" : "bg-white text-gray-600 border border-gray-200 hover:bg-gray-100"}`}
             >
-              Chưa phân loại
+              TẤT CẢ LOẠI
             </button>
-          )}
+            {uniqueTypes.map((type: any) => {
+              const label = typeLabels[type] || type;
+              return (
+                <button
+                  key={type}
+                  onClick={() => setTypeFilter(type)}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-black transition-all uppercase tracking-wider ${typeFilter === type ? "bg-blue-600 text-white shadow-md scale-105" : "bg-white text-gray-600 border border-gray-200 hover:bg-gray-100"}`}
+                >
+                  {label.toUpperCase()}
+                </button>
+              );
+            })}
+          </div>
         </div>
       )}
 
       {activeQuestions.map((q: any, index: number) => {
         const qDiff = parseExplanation(q.explanation, q.difficulty).diff?.toLowerCase() || "none";
+        const qType = q.question_type || "mcq";
+
         if (filter !== "all" && qDiff !== filter) return null;
+        if (typeFilter !== "all" && qType !== typeFilter) return null;
 
         if (editingId === q.id) {
           return (
@@ -410,21 +565,20 @@ export default function QuestionList({ initialQuestions, quizId, canEdit = true 
               )}
             </div>
 
-            <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-2 mb-5 pr-20">
+            <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3 mb-5 pr-20">
               <h3 className="font-bold text-lg text-gray-800 leading-relaxed m-0">Câu {index + 1}: {q.question_text}</h3>
-              <span className={`shrink-0 inline-flex items-center px-2.5 py-1 text-xs font-black rounded-lg uppercase tracking-wider border shadow-sm ${parseExplanation(q.explanation, q.difficulty).diff ? "bg-indigo-50 text-indigo-700 border-indigo-200" : "bg-gray-50 text-gray-400 border-gray-200 italic"}`}>
-                {parseExplanation(q.explanation, q.difficulty).diff || "Chưa phân loại"}
-              </span>
+              <div className="flex flex-wrap gap-2 shrink-0">
+                <span className={`inline-flex items-center px-2.5 py-1 text-xs font-black rounded-lg uppercase tracking-wider border shadow-sm ${parseExplanation(q.explanation, q.difficulty).diff ? "bg-indigo-50 text-indigo-700 border-indigo-200" : "bg-gray-50 text-gray-400 border-gray-200 italic"}`}>
+                  {parseExplanation(q.explanation, q.difficulty).diff || "Chưa phân loại"}
+                </span>
+                <span className={`inline-flex items-center px-2.5 py-1 text-xs font-black rounded-lg uppercase tracking-wider border shadow-sm ${getTypeBadge(q.question_type || 'mcq').css}`}>
+                  {getTypeBadge(q.question_type || 'mcq').text}
+                </span>
+              </div>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-5">
-              {sortedOptions?.map((opt: any) => (
-                <div key={opt.id} className={`p-3 rounded-lg border flex items-start gap-2 ${opt.is_correct ? 'bg-green-50 border-green-200 text-green-900 font-medium shadow-sm' : 'bg-gray-50 border-gray-100 text-gray-700'}`}>
-                  <span className="font-bold flex-shrink-0">{opt.option_label}.</span>
-                  <span>{opt.option_text}</span>
-                  {opt.is_correct && <CheckCircle className="ml-auto flex-shrink-0 text-green-500" size={18} />}
-                </div>
-              ))}
+            <div className="mb-5">
+              {renderTeacherQuestionOptions(q)}
             </div>
 
             {q.explanation && (

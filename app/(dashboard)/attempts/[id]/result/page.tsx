@@ -26,14 +26,11 @@ export default async function ResultPage({ params }: { params: Promise<{ id: str
 
   const role = await getUserRole(user.id);
 
-  // Kiểm tra quyền xem:
-  // 1. Người làm bài (attempt owner) luôn xem được kết quả của chính mình
-  // 2. Giáo viên sở hữu bộ đề (quiz owner) được xem kết quả của học viên
+  // Kiểm tra quyền xem
   const isAttemptOwner = attempt.user_id === user.id;
   const isQuizOwner = attempt.quizzes?.user_id === user.id;
   const isTeacherViewing = isQuizOwner && !isAttemptOwner && (role === 'teacher' || role === 'admin');
 
-  // Chặn truy cập nếu không phải attempt owner và không phải quiz owner
   if (!isAttemptOwner && !isQuizOwner) {
     return notFound();
   }
@@ -44,19 +41,18 @@ export default async function ResultPage({ params }: { params: Promise<{ id: str
     .select(`
        id,
        is_correct,
-       questions (id, question_text, explanation, difficulty),
+       questions (id, question_text, question_type, explanation, difficulty),
        question_options (*),
        selected_option_id
     `)
     .eq('attempt_id', id);
 
-  // Get the correct options for the questions that the user answered to display right/wrong
-  const questionIds = answers?.map((a: any) => a.questions?.id) || [];
-  const { data: correctOptions } = await adminDb
+  // Get ALL options for each question (to display multi-select, matching etc.)
+  const questionIds = answers?.map((a: any) => a.questions?.id).filter(Boolean) || [];
+  const { data: allOptions } = await adminDb
     .from('question_options')
-    .select('question_id, option_text, option_label')
-    .in('question_id', questionIds)
-    .eq('is_correct', true);
+    .select('question_id, option_text, option_label, is_correct')
+    .in('question_id', questionIds);
 
   const score = attempt.total_correct || 0;
   const total = attempt.total_questions || 0;
@@ -69,6 +65,19 @@ export default async function ResultPage({ params }: { params: Promise<{ id: str
     const aiMatch = text.match(/^(?:Đây là )?(?:câu hỏi )?(?:ở )?(?:mức độ|cấp độ)\s+([^.]*?)\.\s*(.*)/is);
     if (aiMatch) return { diff: aiMatch[1].trim(), text: aiMatch[2] };
     return { diff: dbDiff || null, text };
+  };
+
+  // Type label helper
+  const getTypeLabel = (qType: string) => {
+    const labels: Record<string, { text: string; color: string }> = {
+      'mcq': { text: 'Trắc nghiệm', color: 'bg-blue-100 text-blue-700' },
+      'true_false': { text: 'Đúng/Sai', color: 'bg-green-100 text-green-700' },
+      'fill_blank': { text: 'Điền trống', color: 'bg-cyan-100 text-cyan-700' },
+      'short_answer': { text: 'Trả lời ngắn', color: 'bg-purple-100 text-purple-700' },
+      'multi_select': { text: 'Chọn nhiều', color: 'bg-amber-100 text-amber-700' },
+      'matching': { text: 'Ghép đôi', color: 'bg-emerald-100 text-emerald-700' },
+    };
+    return labels[qType] || labels['mcq'];
   };
 
   const learnerName = attempt.users?.full_name || attempt.users?.email || "Học viên";
@@ -124,7 +133,10 @@ export default async function ResultPage({ params }: { params: Promise<{ id: str
         <h2 className="text-xl font-black text-gray-800 border-b border-gray-200 pb-4 mb-6">Chi tiết đáp án ({answers?.length} câu)</h2>
 
         {answers?.map((ans: any, index: number) => {
-          const correctOpt = correctOptions?.find(opt => opt.question_id === ans.questions?.id);
+          const qType = ans.questions?.question_type || 'mcq';
+          const typeLabel = getTypeLabel(qType);
+          const qOptions = allOptions?.filter(o => o.question_id === ans.questions?.id) || [];
+          const correctOpts = qOptions.filter(o => o.is_correct);
 
           return (
             <div key={ans.id} className={`bg-white p-6 rounded-2xl shadow-sm relative border-l-4 ${ans.is_correct ? 'border-green-500' : 'border-red-500'} overflow-hidden`}>
@@ -136,30 +148,97 @@ export default async function ResultPage({ params }: { params: Promise<{ id: str
 
               <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-2 mb-5 pr-12">
                 <h3 className="font-bold text-lg text-gray-800 leading-relaxed m-0">Câu {index + 1}: {ans.questions?.question_text}</h3>
-                <span className={`shrink-0 inline-flex items-center px-2 py-0.5 text-[10px] font-black rounded uppercase tracking-widest border shadow-sm transition-all mt-1 sm:mt-0 ${parseExplanation(ans.questions?.explanation, ans.questions?.difficulty).diff ? "bg-indigo-50 text-indigo-700 border-indigo-200" : "bg-gray-50 text-gray-400 border-gray-100 italic"}`}>
-                  {parseExplanation(ans.questions?.explanation, ans.questions?.difficulty).diff || "Chưa phân loại"}
-                </span>
+                <div className="flex items-center gap-2 shrink-0 mt-1 sm:mt-0">
+                  <span className={`${typeLabel.color} px-2 py-0.5 text-[10px] font-bold rounded uppercase tracking-wider`}>{typeLabel.text}</span>
+                  <span className={`inline-flex items-center px-2 py-0.5 text-[10px] font-black rounded uppercase tracking-widest border shadow-sm ${parseExplanation(ans.questions?.explanation, ans.questions?.difficulty).diff ? "bg-indigo-50 text-indigo-700 border-indigo-200" : "bg-gray-50 text-gray-400 border-gray-100 italic"}`}>
+                    {parseExplanation(ans.questions?.explanation, ans.questions?.difficulty).diff || "Chưa phân loại"}
+                  </span>
+                </div>
               </div>
 
-              {!ans.is_correct && (
-                <div className="p-3 bg-red-50/50 border border-red-100 text-red-800 rounded-xl mb-3 flex items-start gap-2 relative">
-                  <div className="w-1.5 h-full bg-red-300 absolute left-0 top-0 rounded-l-xl"></div>
-                  <span className="font-bold opacity-70 min-w-[24px]">{ans.question_options?.option_label}.</span>
-                  <span className="line-through opacity-70">{ans.question_options?.option_text}</span>
-                  <span className="ml-auto text-xs font-bold text-red-500 bg-red-100 px-2 py-1 rounded">{isTeacherViewing ? "(Lựa chọn của học viên)" : "(Lựa chọn của bạn)"}</span>
-                </div>
+              {/* === ANSWER DISPLAY BY TYPE === */}
+              {(qType === 'mcq' || qType === 'true_false') && (
+                <>
+                  {!ans.is_correct && ans.question_options && (
+                    <div className="p-3 bg-red-50/50 border border-red-100 text-red-800 rounded-xl mb-3 flex items-start gap-2 relative">
+                      <div className="w-1.5 h-full bg-red-300 absolute left-0 top-0 rounded-l-xl"></div>
+                      <span className="font-bold opacity-70 min-w-[24px]">{ans.question_options?.option_label}.</span>
+                      <span className="line-through opacity-70">{ans.question_options?.option_text}</span>
+                      <span className="ml-auto text-xs font-bold text-red-500 bg-red-100 px-2 py-1 rounded">{isTeacherViewing ? "(Lựa chọn của học viên)" : "(Lựa chọn của bạn)"}</span>
+                    </div>
+                  )}
+                  <div className="p-3 bg-green-50/50 border border-green-100 text-green-800 font-medium rounded-xl mb-4 flex items-start gap-2 relative">
+                    <div className="w-1.5 h-full bg-green-400 absolute left-0 top-0 rounded-l-xl"></div>
+                    <span className="font-bold text-green-700 min-w-[24px]">{correctOpts[0]?.option_label}.</span>
+                    <span>{correctOpts[0]?.option_text}</span>
+                    {!ans.is_correct ? (
+                      <span className="ml-auto text-xs font-bold text-green-600 bg-green-100 px-2 py-1 rounded">(Đáp án chuẩn)</span>
+                    ) : (
+                      <span className="ml-auto text-xs font-bold text-green-600 bg-green-100 px-2 py-1 rounded">{isTeacherViewing ? "(Học viên chọn đúng)" : "(Bạn chọn đúng)"}</span>
+                    )}
+                  </div>
+                </>
               )}
 
-              <div className="p-3 bg-green-50/50 border border-green-100 text-green-800 font-medium rounded-xl mb-4 flex items-start gap-2 relative">
-                <div className="w-1.5 h-full bg-green-400 absolute left-0 top-0 rounded-l-xl"></div>
-                <span className="font-bold text-green-700 min-w-[24px]">{correctOpt?.option_label}.</span>
-                <span>{correctOpt?.option_text}</span>
-                {!ans.is_correct ? (
-                  <span className="ml-auto text-xs font-bold text-green-600 bg-green-100 px-2 py-1 rounded">(Đáp án chuẩn)</span>
-                ) : (
-                  <span className="ml-auto text-xs font-bold text-green-600 bg-green-100 px-2 py-1 rounded">{isTeacherViewing ? "(Học viên chọn đúng)" : "(Bạn chọn đúng)"}</span>
-                )}
-              </div>
+              {(qType === 'fill_blank' || qType === 'short_answer') && (
+                <>
+                  <div className="p-3 bg-green-50/50 border border-green-100 text-green-800 font-medium rounded-xl mb-4 flex items-start gap-2 relative">
+                    <div className="w-1.5 h-full bg-green-400 absolute left-0 top-0 rounded-l-xl"></div>
+                    <span className="font-bold text-green-700">Đáp án đúng:</span>
+                    <span>{correctOpts[0]?.option_text || '—'}</span>
+                    {ans.is_correct && (
+                      <span className="ml-auto text-xs font-bold text-green-600 bg-green-100 px-2 py-1 rounded">{isTeacherViewing ? "(Học viên trả lời đúng)" : "(Bạn trả lời đúng)"}</span>
+                    )}
+                  </div>
+                </>
+              )}
+
+              {qType === 'multi_select' && (
+                <>
+                  <div className="p-3 bg-green-50/50 border border-green-100 text-green-800 font-medium rounded-xl mb-4 relative">
+                    <div className="w-1.5 h-full bg-green-400 absolute left-0 top-0 rounded-l-xl"></div>
+                    <div className="pl-2">
+                      <span className="font-bold text-green-700 block mb-1">Các đáp án đúng:</span>
+                      <ul className="list-disc list-inside space-y-1">
+                        {correctOpts.map((opt, i) => (
+                          <li key={i}><span className="font-bold">{opt.option_label}.</span> {opt.option_text}</li>
+                        ))}
+                      </ul>
+                    </div>
+                    {ans.is_correct && (
+                      <span className="absolute top-3 right-3 text-xs font-bold text-green-600 bg-green-100 px-2 py-1 rounded">{isTeacherViewing ? "(Chọn đúng tất cả)" : "(Bạn chọn đúng)"}</span>
+                    )}
+                  </div>
+                </>
+              )}
+
+              {qType === 'matching' && (
+                <>
+                  <div className="p-3 bg-green-50/50 border border-green-100 text-green-800 font-medium rounded-xl mb-4 relative">
+                    <div className="w-1.5 h-full bg-green-400 absolute left-0 top-0 rounded-l-xl"></div>
+                    <div className="pl-2">
+                      <span className="font-bold text-green-700 block mb-2">Các cặp ghép đúng:</span>
+                      <div className="space-y-2">
+                        {qOptions.filter(o => o.option_label?.startsWith('pair_')).map((opt, i) => {
+                          try {
+                            const parsed = JSON.parse(opt.option_text);
+                            return (
+                              <div key={i} className="flex items-center gap-2">
+                                <span className="bg-emerald-100 text-emerald-800 font-bold px-2 py-1 rounded text-sm">{parsed.left}</span>
+                                <span className="text-gray-400">→</span>
+                                <span className="bg-emerald-50 text-emerald-800 font-medium px-2 py-1 rounded text-sm border border-emerald-200">{parsed.right}</span>
+                              </div>
+                            );
+                          } catch { return null; }
+                        })}
+                      </div>
+                    </div>
+                    {ans.is_correct && (
+                      <span className="absolute top-3 right-3 text-xs font-bold text-green-600 bg-green-100 px-2 py-1 rounded">{isTeacherViewing ? "(Ghép đúng tất cả)" : "(Bạn ghép đúng)"}</span>
+                    )}
+                  </div>
+                </>
+              )}
 
               <div className="bg-gray-50 p-4 rounded-xl text-sm text-gray-600 border border-gray-100 leading-relaxed">
                 <strong className="text-gray-800 mr-2 flex items-center gap-1 mb-1"><FileText size={14} className="text-blue-500" /> Giải thích chi tiết:</strong>

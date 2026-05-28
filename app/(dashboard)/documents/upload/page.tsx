@@ -13,6 +13,7 @@ export default function DocumentUploadPage() {
   const [subjectName, setSubjectName] = useState("");
   const [questionCount, setQuestionCount] = useState(20);
   const [bloomLevels, setBloomLevels] = useState<string[]>([]);
+  const [questionTypes, setQuestionTypes] = useState<string[]>(['mcq']);
   const [loading, setLoading] = useState(false);
   const [errorText, setErrorText] = useState("");
   const [isErrorExiting, setIsErrorExiting] = useState(false);
@@ -165,7 +166,8 @@ export default function DocumentUploadPage() {
       if (dbError) throw new Error("Lỗi lưu DB: " + dbError.message);
 
       const bloomParam = bloomLevels.length > 0 ? `&bloomLevels=${encodeURIComponent(bloomLevels.join(','))}` : '';
-      router.push(`/documents/${docData.id}/analysis?questionCount=${questionCount}${bloomParam}`);
+      const typesParam = questionTypes.length > 0 ? `&questionTypes=${encodeURIComponent(questionTypes.join(','))}` : '';
+      router.push(`/documents/${docData.id}/analysis?questionCount=${questionCount}${bloomParam}${typesParam}`);
     } catch (err: any) {
       setErrorText(err.message || "Đã có lỗi xảy ra");
       setLoading(false);
@@ -294,6 +296,49 @@ export default function DocumentUploadPage() {
             {bloomLevels.length === 0
               ? "Chưa chọn → AI sẽ tự phân bổ đa dạng tất cả cấp độ."
               : `Đã chọn ${bloomLevels.length} cấp độ: ${bloomLevels.join(', ')}`
+            }
+          </p>
+        </div>
+
+        <div className="mb-6">
+          <label className="block text-sm font-medium text-gray-700 mb-2">Loại câu hỏi muốn tạo</label>
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+            {([
+              { key: 'mcq', label: 'Trắc nghiệm A/B/C/D', icon: '📝' },
+              { key: 'true_false', label: 'Đúng/Sai', icon: '✅' },
+              { key: 'fill_blank', label: 'Điền vào chỗ trống', icon: '✏️' },
+              { key: 'short_answer', label: 'Trả lời ngắn', icon: '💬' },
+              { key: 'multi_select', label: 'Chọn nhiều đáp án', icon: '☑️' },
+              { key: 'matching', label: 'Ghép đôi', icon: '🔗' },
+            ] as const).map(type => {
+              const isSelected = questionTypes.includes(type.key);
+              return (
+                <button
+                  key={type.key}
+                  type="button"
+                  onClick={() => {
+                    setQuestionTypes(prev =>
+                      prev.includes(type.key)
+                        ? prev.filter(t => t !== type.key)
+                        : [...prev, type.key]
+                    );
+                  }}
+                  className={`py-2.5 px-3 rounded-lg font-bold text-xs border-2 transition-all flex items-center gap-1.5 ${
+                    isSelected
+                      ? 'bg-emerald-600 text-white border-emerald-600 shadow-lg shadow-emerald-500/30 scale-105'
+                      : 'bg-white text-gray-600 border-gray-200 hover:border-emerald-300 hover:text-emerald-600'
+                  }`}
+                >
+                  <span>{type.icon}</span>
+                  {type.label}
+                </button>
+              );
+            })}
+          </div>
+          <p className="text-xs text-gray-400 mt-2">
+            {questionTypes.length === 0
+              ? "Chưa chọn → Mặc định tạo trắc nghiệm A/B/C/D."
+              : `Đã chọn ${questionTypes.length} loại: ${questionTypes.join(', ')}`
             }
           </p>
         </div>

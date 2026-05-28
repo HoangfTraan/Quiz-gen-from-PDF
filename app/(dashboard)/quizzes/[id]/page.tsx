@@ -10,10 +10,13 @@ import { canAuthorQuiz, canTakePublishedQuiz } from "@/utils/rbac";
 
 export default async function QuizDetailsPage({
   params,
+  searchParams
 }: {
   params: Promise<{ id: string }>;
+  searchParams: Promise<{ targetCount?: string }>;
 }) {
   const { id } = await params;
+  const { targetCount } = await searchParams;
   const supabase = await createClient();
 
   // Lấy user hiện tại và role
@@ -61,6 +64,7 @@ export default async function QuizDetailsPage({
         `
          id,
          question_text,
+         question_type,
          explanation,
          difficulty,
          moderation_status,
@@ -117,6 +121,21 @@ export default async function QuizDetailsPage({
           • Gồm {questionCount} câu hỏi
         </p>
       </div>
+
+      {targetCount && questionCount < parseInt(targetCount, 10) && (
+        <div className="mb-6 p-4 bg-blue-50 border border-blue-100 rounded-2xl flex items-start gap-3">
+          <div className="w-10 h-10 rounded-xl bg-blue-100/50 flex items-center justify-center flex-shrink-0 text-blue-600 font-bold">
+            💡
+          </div>
+          <div>
+            <h4 className="font-bold text-blue-900 text-sm">Đã tối ưu hóa số lượng câu hỏi</h4>
+            <p className="text-xs text-blue-700 mt-1 leading-relaxed">
+              Hệ thống đã tạo được <strong className="text-blue-900">{questionCount}</strong> trên tổng số <strong className="text-blue-900">{targetCount}</strong> câu hỏi yêu cầu. 
+              Để đảm bảo tính chính xác 100%, hệ thống cam kết <strong>chỉ sử dụng thông tin gốc</strong> và dừng lại khi đã khai thác hết nội dung trong tài liệu mà không tự bịa câu hỏi ảo ngoài lề.
+            </p>
+          </div>
+        </div>
+      )}
 
       {questionCount === 0 && (
         <div className="text-center p-12 bg-white rounded-2xl border border-gray-100 text-gray-500 font-medium mb-6">
