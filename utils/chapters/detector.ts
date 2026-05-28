@@ -2,12 +2,6 @@
  * Chapter Detection Engine
  * 
  * Phát hiện chương/mục trong tài liệu bằng chiến lược Regex-first + AI fallback.
- * 
- * Logic:
- * 1. Chạy regex trước — nhanh, miễn phí, đáng tin
- * 2. Nếu regex tìm được ≥ 2 chương → dùng kết quả regex
- * 3. Nếu < 2 chương → gọi AI (Gemini/CloudAI) fallback
- * 4. Nếu AI cũng không tìm được → trả về 1 chương mặc định "Toàn bộ tài liệu"
  */
 
 import { generateJSON } from '@/utils/ai/provider';
@@ -97,6 +91,65 @@ function cleanTOCLineTitle(title: string): string {
     .replace(/[\r\n]+/g, ' ')
     .replace(/\s{2,}/g, ' ')
     .trim();
+}
+
+/**
+ * Trích xuất các mục con (numbered sections) từ nội dung chương.
+ * Dùng khi chương không có hierarchy từ TOC parser.
+ * 
+ * Nhận diện: "1. Title", "2. Title" (số tuần tự + tiêu đề viết hoa)
+ * và sub-sections: "1.1 Title", "1.2. Title" (ký hiệu thập phân)
+ * 
+ * Dùng heuristic "consecutive numbering": chỉ chấp nhận nếu số tăng tuần tự (1→2→3).
+ * Khi gặp số không tuần tự (restart lại từ 1 hoặc nhảy bậc), dừng trích xuất
+ * để tránh bắt nhầm danh sách con trong nội dung (VD: 7 tầng OSI).
+ */
+function extractSectionsFromContent(content: string): OutlineSection[] {
+  if (!content || content.length < 50) return [];
+
+  const sections: OutlineSection[] = [];
+  const lines = content.split('\n');
+
+  // Main section: "N. Title" — số ở đầu dòng, dấu chấm, khoảng trắng, tiêu đề viết hoa (>5 ký tự)
+  const MAIN_SECTION_RE = /^[\s]*(\d+)\.\s+([A-ZÀ-Ỹ][^\n]{5,})/;
+  // Sub-section: "N.N Title" hoặc "N.N. Title" — ký hiệu thập phân
+  const SUB_SECTION_RE = /^[\s]*(\d+\.\d+)\.?\s+([A-ZÀ-Ỹa-zà-ỹ][^\n]{3,})/;
+
+  let currentSection: OutlineSection | null = null;
+  let lastMainNumber = 0;
+  let extractionStopped = false;
+
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.length < 3) continue;
+    if (extractionStopped) break;
+
+    // Kiểm tra sub-section trước (pattern cụ thể hơn: "1.1 Title")
+    const subMatch = trimmed.match(SUB_SECTION_RE);
+    if (subMatch && currentSection) {
+      currentSection.sections = currentSection.sections || [];
+      currentSection.sections.push({ title: cleanTOCLineTitle(trimmed) });
+      continue;
+    }
+
+    // Kiểm tra main section ("N. Title")
+    const mainMatch = trimmed.match(MAIN_SECTION_RE);
+    if (mainMatch) {
+      const num = parseInt(mainMatch[1], 10);
+      if (num === lastMainNumber + 1) {
+        // Số tuần tự → section hợp lệ
+        currentSection = { title: cleanTOCLineTitle(trimmed), sections: [] };
+        sections.push(currentSection);
+        lastMainNumber = num;
+      } else {
+        // Số không tuần tự → danh sách con hoặc nội dung khác, dừng trích xuất
+        extractionStopped = true;
+      }
+    }
+  }
+
+  // Chỉ trả về nếu tìm được >= 2 sections (tránh false positive)
+  return sections.length >= 2 ? sections : [];
 }
 
 function detectByRegex(text: string): DetectedChapter[] {
@@ -306,7 +359,7 @@ function detectByRegex(text: string): DetectedChapter[] {
   // ========================================================================
   // STEP 3: Tìm vị trí body thực tế cho từng chương (progressive search)
   // ========================================================================
-  if (tempChapters.length >= 2) {
+  if (tempChapters.length >= 1) {
     console.log(`[ChapterDetector/Regex] ✅ Successfully extracted ${tempChapters.length} chapters & full outline from TOC!`);
 
     const chapters: DetectedChapter[] = [];
@@ -368,6 +421,16 @@ function detectByRegex(text: string): DetectedChapter[] {
       chapters[i].content = text.substring(chapters[i].startPosition, chapters[i].endPosition).trim();
     }
 
+    // Bổ sung hierarchy cho chương chưa có sections (trích xuất từ nội dung)
+    for (const ch of chapters) {
+      if (!ch.metadata?.hierarchy || ch.metadata.hierarchy.length === 0) {
+        const sections = extractSectionsFromContent(ch.content);
+        if (sections.length > 0) {
+          ch.metadata = { ...ch.metadata, hierarchy: sections };
+        }
+      }
+    }
+
     return chapters;
   }
 
@@ -414,7 +477,93 @@ function detectByRegex(text: string): DetectedChapter[] {
     currentPosition += line.length + 1;
   }
 
-  if (chapterByNumber.size < 2) return [];
+  if (chapterByNumber.size < 1) {
+    // FALLBACK 4.2: Phát hiện các phần đánh số đơn thuần (Plain Numbered Sections) VD: "1. Tiêu đề", "2. Tiêu đề"
+    console.log('[ChapterDetector/Regex] No regular chapters found. Checking for plain numbered sections...');
+    const NUMBER_RE = /^[\s]*(\d+)\.(?!\d)[\s]*(.+)$/;
+    const rawMatches: { number: number; title: string; position: number; lineIndex: number }[] = [];
+    let curPos = 0;
+
+    for (let i = 0; i < allLines.length; i++) {
+      const line = allLines[i];
+      const trimmed = line.trim();
+      
+      // Bỏ qua dòng giống mục lục
+      if (DOT_PAGE_RE.test(trimmed)) {
+        curPos += line.length + 1;
+        continue;
+      }
+
+      const match = trimmed.match(NUMBER_RE);
+      if (match) {
+        const cleanFullTitle = cleanTitle(trimmed);
+        if (!shouldSkipEntry(cleanFullTitle)) {
+          rawMatches.push({
+            number: parseInt(match[1], 10),
+            title: trimmed, // Giữ nguyên tiêu đề đầy đủ bao gồm cả số
+            position: curPos,
+            lineIndex: i
+          });
+        }
+      }
+      curPos += line.length + 1;
+    }
+
+    // Lọc bỏ các mục là inline list (các mục có số liên tiếp và nằm quá gần nhau <= 3 dòng)
+    const matches = rawMatches.filter((m, i, arr) => {
+      const prev = arr[i - 1];
+      const next = arr[i + 1];
+      let isInline = false;
+      
+      if (prev && m.number === prev.number + 1 && (m.lineIndex - prev.lineIndex) <= 3) {
+        isInline = true;
+      }
+      if (next && next.number === m.number + 1 && (next.lineIndex - m.lineIndex) <= 3) {
+        isInline = true;
+      }
+      
+      return !isInline;
+    });
+
+    const tempChapterMap = new Map<number, { title: string; position: number }>();
+    matches.forEach(m => {
+      // Lấy occurrence ĐẦU TIÊN để tránh các list con hoặc số liệu rác đè lên tiêu đề chính
+      if (!tempChapterMap.has(m.number)) {
+        tempChapterMap.set(m.number, {
+          title: m.title,
+          position: m.position
+        });
+      }
+    });
+
+    const sortedChapters = Array.from(tempChapterMap.entries())
+      .map(([num, data]) => ({ number: num, ...data }))
+      .sort((a, b) => a.position - b.position);
+
+    let validPrefixCount = 0;
+    for (let i = 0; i < sortedChapters.length; i++) {
+      // Tìm chuỗi các chương liên tiếp hợp lệ (1, 2, 3...)
+      if (sortedChapters[i].number === i + 1) {
+        validPrefixCount++;
+      } else {
+        break; // Dừng lại ở số lạc loài đầu tiên
+      }
+    }
+
+    if (validPrefixCount >= 2) {
+      const finalChapters = sortedChapters.slice(0, validPrefixCount);
+      console.log(`[ChapterDetector/Regex] Valid numbered outline found with ${finalChapters.length} sections`);
+      finalChapters.forEach(c => {
+        chapterByNumber.set(c.number.toString(), { title: c.title, position: c.position });
+      });
+    } else {
+      console.log(`[ChapterDetector/Regex] Numbered items did not form a valid chapter structure. Ignoring.`);
+    }
+    
+    if (chapterByNumber.size < 1) {
+      return [];
+    }
+  }
 
   // Sắp xếp theo vị trí và tạo DetectedChapter
   const sortedMatches = Array.from(chapterByNumber.values()).sort((a, b) => a.position - b.position);
@@ -437,6 +586,16 @@ function detectByRegex(text: string): DetectedChapter[] {
     });
   }
 
+  // Bổ sung hierarchy cho chương chưa có sections (trích xuất từ nội dung)
+  for (const ch of chapters) {
+    if (!ch.metadata?.hierarchy || ch.metadata.hierarchy.length === 0) {
+      const sections = extractSectionsFromContent(ch.content);
+      if (sections.length > 0) {
+        ch.metadata = { ...ch.metadata, hierarchy: sections };
+      }
+    }
+  }
+
   return chapters;
 }
 
@@ -446,45 +605,39 @@ function detectByRegex(text: string): DetectedChapter[] {
 
 async function detectByAI(text: string): Promise<DetectedChapter[]> {
   // Chỉ gửi phần đầu tài liệu để AI phân tích cấu trúc Đề cương/Mục lục (tiết kiệm token)
-  const previewLength = Math.min(text.length, 12000);
+  const previewLength = Math.min(text.length, 25000);
   const previewText = text.substring(0, previewLength);
 
   const prompt = `Phân tích cấu trúc tài liệu sau và nhận diện tất cả các chương/phần và các mục nhỏ lồng nhau có trong tài liệu.
-Đặc biệt chú ý đến phần Mục lục hoặc Đề cương ở những trang đầu của tài liệu.
+Đặc biệt chú ý đến phần Mục lục hoặc Đề cương ở những trang đầu của tài liệu hoặc các tiêu đề slide bài giảng lớn phân chia nội dung chính.
 
-QUY TẮC PHÂN CẤP ĐỀ CƯƠNG:
-1. Nhận diện các chương/phần lớn nhất làm gốc (Level 1). Ví dụ: "Chương 1", "Chương I", "Phần I", "Bài 1", hoặc các tiêu đề lớn tương đương.
-2. Nhận diện các mục con của từng chương lớn (Level 2). Ví dụ: mục đánh dấu bằng số La Mã như "I.", "II.", "III." hoặc tương đương nằm trong Chương lớn.
-3. Nhận diện các mục con nhỏ hơn của mục Level 2 (Level 3). Ví dụ: mục đánh dấu bằng số lẻ như "1.", "2.", "3." hoặc tương đương nằm trong mục La Mã.
-4. Nhận diện các mục con chi tiết hơn (Level 4). Ví dụ: mục thập phân như "1.1.", "1.2.", "1.1.1." hoặc tương đương nằm trong mục số lẻ.
-5. Đảm bảo tên các tiêu đề chương/mục được làm sạch: loại bỏ toàn bộ các dấu chấm lửng dẫn trang (như "....... 4") và số trang ở cuối.
+QUY TẮC BẮT BUỘC VỀ SỰ TỒN TẠI CỦA CẤU TRÚC:
+- Nếu tài liệu là văn bản ngắn, liên tục, hoặc chỉ là nội dung thô không được phân chia thành các phần lớn/chương rõ ràng (không có Mục lục hay Đề cương rõ ràng ở đầu, không phải slide bài giảng phân chủ đề), bạn BẮT BUỘC phải trả về danh sách "chapters" là RỖNG ([]).
+- Tuyệt đối không tự ý bịa ra hay cố gắng chia nhỏ tài liệu nếu cấu trúc của nó không rõ ràng. Chỉ chia khi có cấu trúc chương/mục lớn rõ ràng.
+
+QUY TẮC PHÂN CẤP ĐỀ CƯƠNG (chỉ áp dụng nếu tài liệu CÓ cấu trúc rõ ràng):
+1. Nhận diện các chương/phần lớn nhất làm gốc (Level 1). Ví dụ: "Chương 1", "Chương I", "Phần I", "Bài 1", các tiêu đề lớn phân chia rõ ràng hoặc các phần chính của slide.
+2. Nhận diện các mục con của từng chương lớn (Level 2). Ví dụ: mục đánh dấu bằng số La Mã như "I.", "II.", "III." hoặc các chủ đề con lớn.
+3. Nhận diện các mục con nhỏ hơn của mục Level 2 (Level 3). Ví dụ: mục đánh dấu bằng số lẻ như "1.", "2.", "3." hoặc tương đương.
+4. Đảm bảo tên các tiêu đề chương/mục được làm sạch: loại bỏ toàn bộ các dấu chấm lửng dẫn trang (như "....... 4") và số trang ở cuối.
 
 Trả về định dạng JSON chuẩn:
 {
   "chapters": [
     {
-      "title": "Tên chương lớn (Level 1)",
-      "start_keyword": "Vài từ độc nhất ở dòng bắt đầu chương trong tài liệu",
+      "title": "Tên chương lớn (Level 1) hoặc tên phần chính",
+      "start_keyword": "Vài từ độc nhất ở dòng bắt đầu chương/phần này trong tài liệu",
       "sections": [
         {
-          "title": "Tên mục con Level 2 (Ví dụ: 'I. Giới thiệu')",
-          "sections": [
-            {
-              "title": "Tên mục con Level 3 (Ví dụ: '1. Khái niệm')",
-              "sections": [
-                {
-                  "title": "Tên mục con Level 4 (Ví dụ: '1.1. Khái niệm chuỗi cung ứng')"
-                }
-              ]
-            }
-          ]
+          "title": "Tên mục con Level 2",
+          "sections": []
         }
       ]
     }
   ]
 }
 
-NỘI DUNG TÀI LIỆU (Đoạn đầu chứa Mục lục):
+NỘI DUNG TÀI LIỆU:
 """
 ${previewText}
 """`;
@@ -501,48 +654,52 @@ ${previewText}
 
     // Map AI results sang DetectedChapter
     const chapters: DetectedChapter[] = [];
+    let searchFrom = 0;
 
     for (let i = 0; i < aiData.chapters.length; i++) {
       const ch = aiData.chapters[i];
       if (!ch.title) continue;
 
-      // Tìm vị trí bắt đầu bằng start_keyword
-      let startPos = 0;
+      // Tìm vị trí bắt đầu bằng start_keyword (Tìm tuần tự từ searchFrom để tránh dính TOC)
+      let startPos = -1;
       if (ch.start_keyword) {
-        const keywordPos = text.indexOf(ch.start_keyword);
+        const keywordPos = text.indexOf(ch.start_keyword, searchFrom);
         if (keywordPos >= 0) {
           // Lùi lại đầu dòng
           startPos = text.lastIndexOf('\n', keywordPos) + 1;
         }
       }
 
-      // Nếu không tìm được bằng keyword, ước lượng vị trí
-      if (startPos === 0 && i > 0) {
-        startPos = Math.floor((i / aiData.chapters.length) * text.length);
-      }
-
-      const nextCh = aiData.chapters[i + 1];
-      let endPos = text.length;
-      if (nextCh?.start_keyword) {
-        const nextKeywordPos = text.indexOf(nextCh.start_keyword, startPos + 1);
-        if (nextKeywordPos >= 0) {
-          endPos = text.lastIndexOf('\n', nextKeywordPos) + 1;
+      // Nếu không tìm được bằng keyword, ước lượng hoặc lấy điểm tiếp tục
+      if (startPos === -1) {
+        if (i === 0) {
+          startPos = 0;
+        } else {
+          startPos = searchFrom;
         }
-      } else if (i < aiData.chapters.length - 1) {
-        endPos = Math.floor(((i + 1) / aiData.chapters.length) * text.length);
       }
 
       chapters.push({
         index: i + 1,
         title: ch.title,
-        content: text.substring(startPos, endPos).trim(),
+        content: '',
         startPosition: startPos,
-        endPosition: endPos,
+        endPosition: text.length,
         detectionMethod: 'ai',
         metadata: {
           hierarchy: ch.sections || []
         }
       });
+
+      // Di chuyển searchFrom để tìm chương tiếp theo
+      searchFrom = startPos + 20;
+    }
+
+    // Phân chia ranh giới nội dung và cập nhật endPosition
+    for (let i = 0; i < chapters.length; i++) {
+      const next = chapters[i + 1];
+      chapters[i].endPosition = next ? next.startPosition : text.length;
+      chapters[i].content = text.substring(chapters[i].startPosition, chapters[i].endPosition).trim();
     }
 
     return chapters.length >= 2 ? chapters : [];
@@ -666,50 +823,66 @@ export async function detectChapters(text: string): Promise<DetectedChapter[]> {
 
   console.log('[ChapterDetector] Starting detection (TEMPORARY: Regex-Only Mode)...');
 
-  // Step 1: Chạy Super-Regex trước (nhanh, miễn phí, tự động phân tích TOC)
+  // Step 1: Chạy Regex trước
   const regexResult = detectByRegex(text);
   
-  if (regexResult.length >= 1) {
-    console.log(`[ChapterDetector] Regex-Only Mode: Successfully found ${regexResult.length} chapters.`);
+  if (regexResult.length >= 2) {
+    console.log(`[ChapterDetector] Super-Regex successfully extracted ${regexResult.length} chapters.`);
+
+    // Sửa lỗi dính chữ (thiếu dấu cách) trong tiêu đề bằng AI
+    try {
+      const titles = regexResult.map(c => c.title);
+      // Chỉ gọi AI sửa khi có ít nhất một tiêu đề có dấu hiệu dính chữ (có từ dài > 10 ký tự không chứa khoảng cách)
+      const needsFix = titles.some(title => {
+        const words = title.split(/\s+/);
+        return words.some(w => w.length > 10);
+      });
+
+      if (needsFix) {
+        console.log('[ChapterDetector] Spacing errors detected in titles. Calling AI to correct spacing...');
+        const prompt = `Sửa lỗi dính chữ (thiếu dấu cách/khoảng trắng) trong danh sách tiêu đề chương/mục dưới đây. Trả về đúng số lượng tiêu đề theo thứ tự, giữ nguyên số chương/mục ở đầu (ví dụ: "1. Tại sao...").
+Nếu tiêu đề đã có dấu cách đầy đủ và đúng chính tả tiếng Việt thì giữ nguyên.
+
+Danh sách tiêu đề cần sửa:
+${titles.map((t, i) => `${i+1}. "${t}"`).join('\n')}
+
+Trả về định dạng JSON chuẩn:
+{
+  "corrected_titles": [
+    "Tiêu đề 1 đã sửa hoặc giữ nguyên",
+    "Tiêu đề 2 đã sửa hoặc giữ nguyên"
+  ]
+}`;
+        const { data } = await generateJSON<{ corrected_titles: string[] }>(
+          prompt,
+          "Bạn là chuyên gia sửa lỗi chính tả và định dạng văn bản tiếng Việt. Chỉ trả về JSON."
+        );
+
+        if (data.corrected_titles && data.corrected_titles.length === regexResult.length) {
+          for (let i = 0; i < regexResult.length; i++) {
+            console.log(`[ChapterDetector] Title corrected: "${regexResult[i].title}" -> "${data.corrected_titles[i]}"`);
+            regexResult[i].title = data.corrected_titles[i];
+          }
+        }
+      }
+    } catch (err) {
+      console.error('[ChapterDetector] Error correcting title spaces with AI:', err);
+      // Bỏ qua lỗi và trả về tiêu đề gốc của regex, tránh crash
+    }
+
     return regexResult;
   }
 
-  /*
-  // =================================================================
-  // PHẦN LOGIC AI
-  // =================================================================
-  
-  if (regexResult.length >= 2) {
-    const hasHierarchy = regexResult.some(c => c.metadata?.hierarchy && c.metadata.hierarchy.length > 0);
-    if (hasHierarchy) {
-      console.log('[ChapterDetector] Super-Regex successfully extracted chapters and outline hierarchy locally. Bypassing AI validation to save 100% tokens!');
-      return regexResult;
-    }
-    
-    console.log(`[ChapterDetector] Regex found ${regexResult.length} candidate chapters but no structured TOC hierarchy. Validating with AI...`);
-    
-    // Step 2: Dùng AI xác thực kết quả của Regex và trích xuất thêm đề cương
-    const isValid = await validateRegexChaptersWithAI(text, regexResult);
-    if (isValid) {
-      console.log('[ChapterDetector] AI validated Regex results as CORRECT. Using Regex results.');
-      return regexResult;
-    }
-    console.log('[ChapterDetector] AI validated Regex results as INCORRECT. Falling back to full AI extraction...');
-  } else {
-    console.log(`[ChapterDetector] Regex found too few chapters (${regexResult.length}), skipping AI validation...`);
-  }
-
-  // Step 3: AI Fallback (Chỉ chạy khi Regex sai hoặc không tìm đủ chương)
-  console.log('[ChapterDetector] Triggering full AI extraction...');
+  // Step 2: AI Fallback (Chạy khi Regex không tìm đủ số chương/phần)
+  console.log(`[ChapterDetector] Regex found too few chapters (${regexResult.length}). Falling back to AI extraction...`);
   const aiResult = await detectByAI(text);
   if (aiResult.length >= 2) {
     console.log(`[ChapterDetector] AI successfully extracted outline with ${aiResult.length} chapters.`);
     return aiResult;
   }
-  */
 
-  // Step 4: Default — 1 chương duy nhất (khi regex không tìm thấy chương nào)
-  console.log('[ChapterDetector] Regex failed to find any chapters, using default chapter.');
+  // Step 3: Default — 1 chương duy nhất (khi cả regex và AI đều không tìm thấy cấu trúc rõ ràng)
+  console.log('[ChapterDetector] Both Regex and AI failed to find structured chapters, using default chapter.');
   return [{
     index: 1,
     title: 'Toàn bộ tài liệu',
