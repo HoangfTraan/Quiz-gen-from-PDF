@@ -35,7 +35,7 @@ const renderTeacherQuestionOptions = (q: any) => {
   const sortedOptions = [...(q.question_options || [])].sort((a: any, b: any) => (a.option_label || '').localeCompare(b.option_label || ''));
 
   if (qType === 'fill_blank' || qType === 'short_answer') {
-    const correctOpt = sortedOptions.find(o => o.is_correct);
+    const correctOpt = sortedOptions.find((o: any) => o.is_correct);
     return (
       <div className="p-4 bg-emerald-50 border border-emerald-100 rounded-xl">
         <p className="text-sm font-bold text-emerald-800 flex items-center gap-1.5">
@@ -47,14 +47,14 @@ const renderTeacherQuestionOptions = (q: any) => {
   }
 
   if (qType === 'matching') {
-    const pairs = sortedOptions.filter(o => o.option_label?.startsWith('pair_'));
+    const pairs = sortedOptions.filter((o: any) => o.option_label?.startsWith('pair_'));
     return (
-      <div className="space-y-2.5">
+      <div className="space-y-3">
         <p className="text-sm font-bold text-emerald-800 flex items-center gap-1.5 mb-2">
           <ListChecks size={16} /> Các cặp ghép đôi chính xác:
         </p>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-          {pairs.map((opt) => {
+        <div className="grid grid-cols-1 gap-3">
+          {pairs.map((opt: any) => {
             let left = '';
             let right = '';
             try {
@@ -69,10 +69,16 @@ const renderTeacherQuestionOptions = (q: any) => {
               );
             }
             return (
-              <div key={opt.id} className="p-3 bg-emerald-50/35 border border-emerald-100/50 rounded-xl flex items-center justify-between gap-3 text-sm">
-                <span className="font-extrabold text-emerald-900 bg-white px-2.5 py-1.5 rounded-lg border border-emerald-100 shadow-sm shrink-0">{left}</span>
-                <span className="text-emerald-500 font-bold">➔</span>
-                <span className="font-medium text-emerald-800 bg-white px-2.5 py-1.5 rounded-lg border border-emerald-100 shadow-sm flex-1 text-right">{right}</span>
+              <div key={opt.id} className="p-4 bg-emerald-50/40 border border-emerald-100/50 rounded-xl flex flex-col sm:flex-row items-stretch sm:items-center gap-4 text-sm">
+                <div className="font-extrabold text-emerald-900 bg-white px-3 py-2.5 rounded-lg border border-emerald-100 shadow-sm sm:w-[45%] shrink-0">
+                  {left}
+                </div>
+                <div className="text-emerald-500 font-bold shrink-0 flex justify-center rotate-90 sm:rotate-0">
+                  ➔
+                </div>
+                <div className="font-medium text-emerald-800 bg-white px-3 py-2.5 rounded-lg border border-emerald-100 shadow-sm flex-1">
+                  {right}
+                </div>
               </div>
             );
           })}
@@ -161,20 +167,35 @@ export default function QuestionList({ initialQuestions, quizId, canEdit = true 
   };
 
   const handleEdit = (q: any) => {
-    const sortedOptions = [...(q.question_options || [])].sort((a: any, b: any) => a.option_label.localeCompare(b.option_label));
+    const qType = q.question_type || 'mcq';
+    let options = [...(q.question_options || [])].sort((a: any, b: any) => (a.option_label || '').localeCompare(b.option_label || ''));
 
-    // Ensure we always have exactly 4 options A, B, C, D
-    const options = ['A', 'B', 'C', 'D'].map(label => {
-      const existing = sortedOptions.find((o: any) => o.option_label === label);
-      return existing || { option_label: label, option_text: "", is_correct: false };
-    });
+    // Bỏ cái chặn ép về A, B, C, D. Cứ giữ nguyên mảng options từ DB, 
+    // TRỪ KHI là mcq mà ko có options thì mới khởi tạo mặc định.
+    if (options.length === 0 && qType === 'mcq') {
+      options = ['A', 'B', 'C', 'D'].map(label => ({ option_label: label, option_text: "", is_correct: false }));
+    } else if (options.length === 0 && qType === 'true_false') {
+      options = [
+        { option_label: "A", option_text: "Đúng", is_correct: true },
+        { option_label: "B", option_text: "Sai", is_correct: false }
+      ];
+    } else if (options.length === 0 && (qType === 'fill_blank' || qType === 'short_answer')) {
+      options = [{ option_label: "A", option_text: "", is_correct: true }];
+    } else if (options.length === 0 && qType === 'matching') {
+      options = [
+        { option_label: "pair_1", option_text: JSON.stringify({left: "", right: ""}), is_correct: true },
+        { option_label: "pair_2", option_text: JSON.stringify({left: "", right: ""}), is_correct: true }
+      ];
+    }
 
     const parsed = parseExplanation(q.explanation || "", q.difficulty);
     setEditForm({
       id: q.id,
+      question_type: qType,
       question_text: q.question_text || "",
       explanation: parsed.text || "",
       bloom_level: parsed.diff || "",
+      image_url: q.image_url || null,
       options,
     });
     setEditingId(q.id);
@@ -183,9 +204,11 @@ export default function QuestionList({ initialQuestions, quizId, canEdit = true 
   const handleAdd = () => {
     setEditForm({
       id: "new",
+      question_type: "mcq",
       question_text: "",
       explanation: "",
       bloom_level: "",
+      image_url: null,
       options: [
         { option_label: "A", option_text: "", is_correct: true },
         { option_label: "B", option_text: "", is_correct: false },
@@ -196,16 +219,344 @@ export default function QuestionList({ initialQuestions, quizId, canEdit = true 
     setEditingId("new");
   };
 
-  const handleSave = async () => {
+
+  const renderEditFormInner = (editForm: any, setEditForm: any) => {
+    const qType = editForm.question_type || 'mcq';
+
+    return (
+      <div className="space-y-8">
+        {/* Question Type and Question Text */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          <div className="lg:col-span-2">
+            <label className="block text-xs font-black text-gray-400 uppercase tracking-widest mb-2 px-1">Nội dung câu hỏi chính</label>
+            <textarea
+              value={editForm.question_text}
+              onChange={(e) => setEditForm({ ...editForm, question_text: e.target.value })}
+              className="w-full bg-gray-50 border-2 border-gray-100 rounded-2xl p-4 outline-none focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-50 transition-all font-bold text-lg text-gray-800 min-h-[120px] shadow-inner"
+              placeholder="Ví dụ: Thủ đô của Việt Nam là gì?"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-black text-gray-400 uppercase tracking-widest mb-2 px-1">Loại câu hỏi</label>
+            <div className="relative">
+              <select 
+                value={qType} 
+                onChange={(e) => {
+                  const newType = e.target.value;
+                  let newOpts = editForm.options;
+                  if (newType === 'true_false') {
+                    newOpts = [{option_label: "A", option_text: "Đúng", is_correct: true}, {option_label: "B", option_text: "Sai", is_correct: false}];
+                  } else if (newType === 'fill_blank' || newType === 'short_answer') {
+                    newOpts = [{option_label: "A", option_text: "", is_correct: true}];
+                  } else if (newType === 'matching') {
+                    newOpts = [{option_label: "pair_1", option_text: JSON.stringify({left:"",right:""}), is_correct: true}, {option_label: "pair_2", option_text: JSON.stringify({left:"",right:""}), is_correct: true}];
+                  } else if (newType === 'mcq' || newType === 'multi_select') {
+                    newOpts = [
+                      {option_label: "A", option_text: "", is_correct: true},
+                      {option_label: "B", option_text: "", is_correct: false},
+                      {option_label: "C", option_text: "", is_correct: false},
+                      {option_label: "D", option_text: "", is_correct: false},
+                    ];
+                  }
+                  setEditForm({...editForm, question_type: newType, options: newOpts});
+                }} 
+                className="w-full bg-white border-2 border-gray-100 rounded-2xl p-4 outline-none focus:border-blue-500 font-bold text-gray-700 shadow-sm appearance-none cursor-pointer"
+              >
+                <option value="mcq">Trắc nghiệm A/B/C/D</option>
+                <option value="multi_select">Chọn nhiều đáp án</option>
+                <option value="true_false">Yes/No (Đúng/Sai)</option>
+                <option value="fill_blank">Điền vào chỗ trống</option>
+                <option value="short_answer">Trả lời ngắn</option>
+                <option value="matching">Ghép đôi</option>
+              </select>
+              <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none text-gray-400">
+                <Plus size={18} className="rotate-45" />
+              </div>
+            </div>
+          </div>
+        </div>
+
+        
+        {/* Image Attachment */}
+        <div className="mt-6">
+          <label className="flex items-center gap-2 text-xs font-black text-gray-400 uppercase tracking-widest mb-2 px-1">
+             Hình ảnh/Dẫn chứng đính kèm
+          </label>
+          {editForm.image_url ? (
+            <div className="relative inline-block border-2 border-gray-200 rounded-xl overflow-hidden group">
+              <img src={editForm.image_url} alt="Dẫn chứng" className="max-w-xs max-h-48 object-contain bg-gray-50" />
+              <button 
+                onClick={() => setEditForm({...editForm, image_url: null})}
+                className="absolute top-2 right-2 bg-red-500 text-white p-1.5 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity shadow-md hover:bg-red-600"
+                title="Xoá ảnh"
+              >
+                <Trash2 size={16} />
+              </button>
+            </div>
+          ) : (
+            <div className="relative">
+              <input 
+                type="file" 
+                accept="image/*"
+                onChange={async (e) => {
+                  const file = e.target.files?.[0];
+                  if (!file) return;
+                  if (file.size > 5 * 1024 * 1024) {
+                    alert("Kích thước file vượt quá 5MB!");
+                    return;
+                  }
+                  setIsSaving(true);
+                  try {
+                    const { data: user } = await supabase.auth.getUser();
+                    if (!user.user) throw new Error("Vui lòng đăng nhập");
+                    
+                    const fileExt = file.name.split('.').pop();
+                    const fileName = `${user.user.id}/${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`;
+                    
+                    const { error: uploadError } = await supabase.storage
+                      .from('question_images')
+                      .upload(fileName, file);
+                      
+                    if (uploadError) throw uploadError;
+                    
+                    const { data } = supabase.storage
+                      .from('question_images')
+                      .getPublicUrl(fileName);
+                      
+                    setEditForm({...editForm, image_url: data.publicUrl});
+                  } catch (err: any) {
+                    console.error(err);
+                    alert("Lỗi khi tải ảnh lên: " + err.message);
+                  } finally {
+                    setIsSaving(false);
+                  }
+                }}
+                className="block w-full text-sm text-gray-500
+                  file:mr-4 file:py-2.5 file:px-4
+                  file:rounded-xl file:border-0
+                  file:text-sm file:font-bold
+                  file:bg-indigo-50 file:text-indigo-700
+                  hover:file:bg-indigo-100 cursor-pointer
+                  border-2 border-dashed border-gray-200 rounded-2xl p-4 bg-gray-50/50 transition-all"
+              />
+            </div>
+          )}
+        </div>
+
+        {/* Options */}
+        <div>
+          {qType === 'true_false' && (
+            <div>
+              <label className="block text-xs font-black text-gray-400 uppercase tracking-widest mb-4 px-1">Chọn đáp án đúng (True/False)</label>
+              <div className="grid grid-cols-2 gap-4">
+                {editForm.options.map((opt: any, optIdx: number) => (
+                  <div key={optIdx} onClick={() => {
+                    const newOpts = editForm.options.map((o: any, i: number) => ({...o, is_correct: i === optIdx}));
+                    setEditForm({...editForm, options: newOpts});
+                  }} className={`cursor-pointer group flex items-center justify-center p-6 rounded-2xl border-2 transition-all ${opt.is_correct ? 'bg-emerald-50 border-emerald-500 shadow-md scale-[1.02]' : 'bg-gray-50 border-gray-100 hover:border-emerald-200'}`}>
+                    <span className={`font-black text-2xl ${opt.is_correct ? 'text-emerald-700' : 'text-gray-400 group-hover:text-emerald-500'}`}>{opt.option_text}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {(qType === 'fill_blank' || qType === 'short_answer') && (
+            <div>
+              <label className="block text-xs font-black text-gray-400 uppercase tracking-widest mb-4 px-1">Đáp án đúng</label>
+              <input 
+                type="text" 
+                value={editForm.options[0]?.option_text || ''} 
+                onChange={(e) => {
+                  setEditForm({...editForm, options: [{option_label: 'A', option_text: e.target.value, is_correct: true}]})
+                }} 
+                className="w-full bg-white border-2 border-emerald-200 focus:border-emerald-500 rounded-2xl p-4 outline-none transition-all font-bold text-lg text-gray-800 shadow-inner" 
+                placeholder="Nhập đáp án chính xác..." 
+              />
+            </div>
+          )}
+
+          {qType === 'matching' && (
+            <div>
+              <label className="block text-xs font-black text-gray-400 uppercase tracking-widest mb-4 px-1">Các cặp ghép đôi</label>
+              <div className="space-y-3">
+                {editForm.options.map((opt: any, optIdx: number) => {
+                  let left = '', right = '';
+                  try {
+                    const parsed = JSON.parse(opt.option_text);
+                    left = parsed.left; right = parsed.right;
+                  } catch(e) {}
+                  return (
+                    <div key={optIdx} className="flex flex-col sm:flex-row items-center gap-3 bg-gray-50 p-3 rounded-2xl border border-gray-100">
+                      <input type="text" value={left} onChange={(e) => {
+                        const newOpts = [...editForm.options];
+                        newOpts[optIdx] = { ...newOpts[optIdx], option_text: JSON.stringify({ left: e.target.value, right }) };
+                        setEditForm({ ...editForm, options: newOpts });
+                      }} placeholder="Vế trái" className="flex-1 w-full p-3 border-2 border-gray-200 focus:border-blue-400 rounded-xl outline-none font-bold" />
+                      <span className="hidden sm:block text-gray-400">➔</span>
+                      <input type="text" value={right} onChange={(e) => {
+                        const newOpts = [...editForm.options];
+                        newOpts[optIdx] = { ...newOpts[optIdx], option_text: JSON.stringify({ left, right: e.target.value }) };
+                        setEditForm({ ...editForm, options: newOpts });
+                      }} placeholder="Vế phải (đáp án ghép đúng)" className="flex-1 w-full p-3 border-2 border-gray-200 focus:border-emerald-400 rounded-xl outline-none font-bold text-emerald-700" />
+                      <button onClick={() => {
+                        const newOpts = editForm.options.filter((_: any, i: number) => i !== optIdx);
+                        setEditForm({ ...editForm, options: newOpts });
+                      }} className="p-3 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-xl transition-colors"><Trash2 size={20}/></button>
+                    </div>
+                  )
+                })}
+                <button onClick={() => {
+                  const newOpts = [...editForm.options, { option_label: `pair_${editForm.options.length + 1}`, option_text: JSON.stringify({left: "", right: ""}), is_correct: true }];
+                  setEditForm({ ...editForm, options: newOpts });
+                }} className="px-4 py-2 mt-2 text-sm font-bold text-blue-600 bg-blue-50 hover:bg-blue-100 rounded-lg flex items-center gap-2 transition-colors">
+                  <Plus size={16}/> Thêm cặp mới
+                </button>
+              </div>
+            </div>
+          )}
+
+          {(qType === 'mcq' || qType === 'multi_select') && (
+            <div>
+              <label className="block text-xs font-black text-gray-400 uppercase tracking-widest mb-4 px-1">Các lựa chọn đáp án ({qType === 'multi_select' ? 'Chọn nhiều' : 'Chọn 1 đáp án đúng'})</label>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {editForm.options.map((opt: any, optIdx: number) => (
+                  <div 
+                    key={optIdx} 
+                    className={`group flex items-center gap-3 p-3 rounded-2xl border-2 transition-all cursor-default ${
+                      opt.is_correct 
+                      ? "bg-emerald-50 border-emerald-500 shadow-sm" 
+                      : "bg-white border-gray-100 hover:border-blue-200 focus-within:border-blue-500"
+                    }`}
+                  >
+                    <button
+                      onClick={() => {
+                        const newOpts = editForm.options.map((o: any, i: number) => {
+                          if (qType === 'mcq') {
+                            return { ...o, is_correct: i === optIdx };
+                          } else {
+                            if (i === optIdx) return { ...o, is_correct: !o.is_correct };
+                            return o;
+                          }
+                        });
+                        setEditForm({ ...editForm, options: newOpts });
+                      }}
+                      className={`shrink-0 w-12 h-12 flex items-center justify-center rounded-xl font-black text-lg transition-all transform active:scale-90 ${
+                        opt.is_correct 
+                        ? "bg-emerald-500 text-white shadow-lg shadow-emerald-200 rotate-3" 
+                        : "bg-gray-100 text-gray-400 group-hover:bg-blue-100 group-hover:text-blue-600"
+                      }`}
+                    >
+                      {opt.option_label}
+                    </button>
+                    <div className="flex-1 flex items-center">
+                      <input
+                        type="text"
+                        value={opt.option_text}
+                        onChange={(e) => {
+                          const newOpts = [...editForm.options];
+                          newOpts[optIdx].option_text = e.target.value;
+                          setEditForm({ ...editForm, options: newOpts });
+                        }}
+                        className="w-full bg-transparent border-none outline-none font-bold text-gray-700 placeholder:text-gray-300 placeholder:font-medium"
+                        placeholder={`Nội dung đáp án ${opt.option_label}...`}
+                      />
+                      <button onClick={() => {
+                          const newOpts = editForm.options.filter((_: any, i: number) => i !== optIdx);
+                          setEditForm({ ...editForm, options: newOpts });
+                        }} 
+                        className="opacity-0 group-hover:opacity-100 p-2 text-red-300 hover:text-red-500 transition-all ml-1"
+                      >
+                        <Trash2 size={16}/>
+                      </button>
+                    </div>
+                    {opt.is_correct && <CheckCircle className="text-emerald-600 mr-2 animate-in zoom-in duration-300 shrink-0" size={20} />}
+                  </div>
+                ))}
+              </div>
+              <button onClick={() => {
+                const labels = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+                const nextLabel = labels[editForm.options.length] || `Opt${editForm.options.length}`;
+                setEditForm({...editForm, options: [...editForm.options, {option_label: nextLabel, option_text: "", is_correct: false}]});
+              }} className="px-4 py-2 mt-4 text-sm font-bold text-blue-600 bg-blue-50 hover:bg-blue-100 rounded-lg flex items-center gap-2 transition-colors">
+                <Plus size={16}/> Thêm lựa chọn
+              </button>
+            </div>
+          )}
+        </div>
+
+        {/* Metadata Section */}
+        <div className="bg-slate-50 p-6 rounded-2xl border border-slate-100 flex flex-col md:flex-row gap-6">
+          <div className="flex-1">
+            <label className="flex items-center gap-2 text-xs font-black text-indigo-400 uppercase tracking-widest mb-2 px-1">
+              <div className="w-1.5 h-1.5 bg-indigo-500 rounded-full" /> Phân loại Bloom
+            </label>
+            <div className="relative">
+              <select
+                value={editForm.bloom_level}
+                onChange={(e) => setEditForm({ ...editForm, bloom_level: e.target.value })}
+                className="w-full bg-white border-2 border-white rounded-xl p-3 outline-none focus:border-indigo-500 shadow-sm transition-all text-sm font-black text-indigo-700 appearance-none cursor-pointer"
+              >
+                <option value="">Chưa phân loại</option>
+                <option value="Nhớ">NHỚ (Remember)</option>
+                <option value="Hiểu">HIỂU (Understand)</option>
+                <option value="Vận dụng">VẬN DỤNG (Apply)</option>
+                <option value="Phân tích">PHÂN TÍCH (Analyze)</option>
+                <option value="Đánh giá">ĐÁNH GIÁ (Evaluate)</option>
+                <option value="Sáng tạo">SÁNG TẠO (Create)</option>
+              </select>
+              <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-indigo-300">
+                <Plus size={16} className="rotate-45" />
+              </div>
+            </div>
+          </div>
+          <div className="flex-[2]">
+            <label className="flex items-center gap-2 text-xs font-black text-blue-400 uppercase tracking-widest mb-2 px-1">
+              <div className="w-1.5 h-1.5 bg-blue-500 rounded-full" /> Giải thích chi tiết
+            </label>
+            <textarea
+              value={editForm.explanation}
+              onChange={(e) => setEditForm({ ...editForm, explanation: e.target.value })}
+              className="w-full bg-white border-2 border-white rounded-xl p-3 outline-none focus:border-blue-500 shadow-sm transition-all text-sm font-medium text-gray-700 min-h-[60px]"
+              placeholder="Giải thích lý do tại sao đáp án này đúng để học sinh dễ hiểu hơn..."
+            />
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+          const handleSave = async () => {
     if (!editForm.question_text.trim()) {
       alert("Vui lòng nhập nội dung câu hỏi!");
       return;
     }
 
-    const hasCorrect = editForm.options.some((o: any) => o.is_correct);
-    if (!hasCorrect) {
-      alert("Vui lòng chọn ít nhất 1 đáp án đúng!");
-      return;
+    if (editForm.question_type === 'fill_blank' || editForm.question_type === 'short_answer') {
+       if (!editForm.options[0]?.option_text.trim()) {
+         alert("Vui lòng nhập đáp án đúng!");
+         return;
+       }
+    } else if (editForm.question_type === 'matching') {
+       if (editForm.options.length < 2) {
+         alert("Vui lòng thêm ít nhất 2 cặp ghép đôi!");
+         return;
+       }
+       for (const opt of editForm.options) {
+         try {
+           const parsed = JSON.parse(opt.option_text);
+           if (!parsed.left.trim() || !parsed.right.trim()) {
+             alert("Vui lòng điền đầy đủ nội dung các vế ghép đôi!");
+             return;
+           }
+         } catch(e) {}
+       }
+    } else {
+      const hasCorrect = editForm.options.some((o: any) => o.is_correct);
+      if (!hasCorrect) {
+        alert("Vui lòng chọn ít nhất 1 đáp án đúng!");
+        return;
+      }
     }
 
     setIsSaving(true);
@@ -221,8 +572,9 @@ export default function QuestionList({ initialQuestions, quizId, canEdit = true 
             quiz_id: quizId,
             question_text: editForm.question_text,
             explanation: fullExplanation,
-            difficulty: editForm.bloom_level || null, // LƯU VÀO CỘT RIÊNG
-            question_type: "mcq",
+            difficulty: editForm.bloom_level || null,
+            question_type: editForm.question_type || "mcq",
+            image_url: editForm.image_url || null,
             ai_generated: false,
             quality_score: 100,
           })
@@ -260,14 +612,14 @@ export default function QuestionList({ initialQuestions, quizId, canEdit = true 
           .update({
             question_text: editForm.question_text,
             explanation: fullExplanation,
-            difficulty: editForm.bloom_level || null, // LƯU VÀO CỘT RIÊNG
+            difficulty: editForm.bloom_level || null,
+            question_type: editForm.question_type || "mcq",
+            image_url: editForm.image_url || null,
           })
           .eq("id", editForm.id);
 
         if (qErr) throw qErr;
 
-        // Instead of upserting manually parsing IDs, we can just delete old options and insert new
-        // Wait, better to keep ids if we can. But since question_options has cascading delete:
         await supabase.from("question_options").delete().eq("question_id", editForm.id);
 
         const optionsToInsert = editForm.options.map((o: any) => ({
@@ -287,7 +639,7 @@ export default function QuestionList({ initialQuestions, quizId, canEdit = true 
         // Update local state
         setQuestions(questions.map(q =>
           q.id === editForm.id
-            ? { ...q, question_text: editForm.question_text, explanation: fullExplanation, difficulty: editForm.bloom_level || null, question_options: optsData }
+            ? { ...q, question_text: editForm.question_text, explanation: fullExplanation, difficulty: editForm.bloom_level || null, question_type: editForm.question_type || "mcq", image_url: editForm.image_url || null, question_options: optsData }
             : q
         ));
       }
@@ -419,102 +771,7 @@ export default function QuestionList({ initialQuestions, quizId, canEdit = true 
               </div>
 
               <div className="space-y-8">
-                {/* Question Section */}
-                <div>
-                  <label className="block text-xs font-black text-gray-400 uppercase tracking-widest mb-2 px-1">Nội dung câu hỏi chính</label>
-                  <textarea
-                    value={editForm.question_text}
-                    onChange={(e) => setEditForm({ ...editForm, question_text: e.target.value })}
-                    className="w-full bg-gray-50 border-2 border-gray-100 rounded-2xl p-4 outline-none focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-50 transition-all font-bold text-lg text-gray-800 min-h-[120px] shadow-inner"
-                    placeholder="Ví dụ: Thủ đô của Việt Nam là gì?"
-                  />
-                </div>
-
-                {/* Options Grid */}
-                <div>
-                  <label className="block text-xs font-black text-gray-400 uppercase tracking-widest mb-4 px-1">Các lựa chọn đáp án (Chọn 1 đáp án đúng)</label>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {editForm.options.map((opt: any, optIdx: number) => (
-                      <div 
-                        key={optIdx} 
-                        className={`group flex items-center gap-3 p-3 rounded-2xl border-2 transition-all cursor-default ${
-                          opt.is_correct 
-                          ? "bg-emerald-50 border-emerald-500 shadow-sm" 
-                          : "bg-white border-gray-100 hover:border-blue-200 focus-within:border-blue-500"
-                        }`}
-                      >
-                        <button
-                          onClick={() => {
-                            const newOpts = editForm.options.map((o: any, i: number) => ({
-                              ...o,
-                              is_correct: i === optIdx
-                            }));
-                            setEditForm({ ...editForm, options: newOpts });
-                          }}
-                          className={`shrink-0 w-12 h-12 flex items-center justify-center rounded-xl font-black text-lg transition-all transform active:scale-90 ${
-                            opt.is_correct 
-                            ? "bg-emerald-500 text-white shadow-lg shadow-emerald-200 rotate-3" 
-                            : "bg-gray-100 text-gray-400 group-hover:bg-blue-100 group-hover:text-blue-600"
-                          }`}
-                        >
-                          {opt.option_label}
-                        </button>
-                        <div className="flex-1">
-                          <input
-                            type="text"
-                            value={opt.option_text}
-                            onChange={(e) => {
-                              const newOpts = [...editForm.options];
-                              newOpts[optIdx].option_text = e.target.value;
-                              setEditForm({ ...editForm, options: newOpts });
-                            }}
-                            className="w-full bg-transparent border-none outline-none font-bold text-gray-700 placeholder:text-gray-300 placeholder:font-medium"
-                            placeholder={`Nội dung đáp án ${opt.option_label}...`}
-                          />
-                        </div>
-                        {opt.is_correct && <CheckCircle className="text-emerald-600 mr-2 animate-in zoom-in duration-300" size={20} />}
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Metadata Section */}
-                <div className="bg-slate-50 p-6 rounded-2xl border border-slate-100 flex flex-col md:flex-row gap-6">
-                  <div className="flex-1">
-                    <label className="flex items-center gap-2 text-xs font-black text-indigo-400 uppercase tracking-widest mb-2 px-1">
-                      <div className="w-1.5 h-1.5 bg-indigo-500 rounded-full" /> Phân loại Bloom
-                    </label>
-                    <div className="relative">
-                      <select
-                        value={editForm.bloom_level}
-                        onChange={(e) => setEditForm({ ...editForm, bloom_level: e.target.value })}
-                        className="w-full bg-white border-2 border-white rounded-xl p-3 outline-none focus:border-indigo-500 shadow-sm transition-all text-sm font-black text-indigo-700 appearance-none cursor-pointer"
-                      >
-                        <option value="">Chưa phân loại</option>
-                        <option value="Nhớ">NHỚ (Remember)</option>
-                        <option value="Hiểu">HIỂU (Understand)</option>
-                        <option value="Vận dụng">VẬN DỤNG (Apply)</option>
-                        <option value="Phân tích">PHÂN TÍCH (Analyze)</option>
-                        <option value="Đánh giá">ĐÁNH GIÁ (Evaluate)</option>
-                        <option value="Sáng tạo">SÁNG TẠO (Create)</option>
-                      </select>
-                      <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-indigo-300">
-                        <Plus size={16} className="rotate-45" />
-                      </div>
-                    </div>
-                  </div>
-                  <div className="flex-[2]">
-                    <label className="flex items-center gap-2 text-xs font-black text-blue-400 uppercase tracking-widest mb-2 px-1">
-                      <div className="w-1.5 h-1.5 bg-blue-500 rounded-full" /> Giải thích chi tiết
-                    </label>
-                    <textarea
-                      value={editForm.explanation}
-                      onChange={(e) => setEditForm({ ...editForm, explanation: e.target.value })}
-                      className="w-full bg-white border-2 border-white rounded-xl p-3 outline-none focus:border-blue-500 shadow-sm transition-all text-sm font-medium text-gray-700 min-h-[60px]"
-                      placeholder="Giải thích lý do tại sao đáp án này đúng để học sinh dễ hiểu hơn..."
-                    />
-                  </div>
-                </div>
+                {renderEditFormInner(editForm, setEditForm)}
 
                 {/* Footer Actions */}
                 <div className="flex items-center justify-between pt-6 mt-4 border-t border-gray-100">
@@ -577,6 +834,13 @@ export default function QuestionList({ initialQuestions, quizId, canEdit = true 
               </div>
             </div>
 
+            
+            {q.image_url && (
+              <div className="mb-5 bg-gray-50/80 p-4 rounded-xl border border-gray-100/80 inline-block">
+                <img src={q.image_url} alt="Dẫn chứng" className="max-w-full max-h-[500px] object-contain rounded-lg shadow-sm" />
+              </div>
+            )}
+
             <div className="mb-5">
               {renderTeacherQuestionOptions(q)}
             </div>
@@ -612,104 +876,9 @@ export default function QuestionList({ initialQuestions, quizId, canEdit = true 
           </div>
 
           <div className="space-y-8">
-            {/* Question Section */}
-            <div>
-              <label className="block text-xs font-black text-gray-400 uppercase tracking-widest mb-2 px-1">Nội dung câu hỏi chính</label>
-              <textarea
-                value={editForm.question_text}
-                onChange={(e) => setEditForm({ ...editForm, question_text: e.target.value })}
-                className="w-full bg-gray-50 border-2 border-gray-100 rounded-2xl p-4 outline-none focus:border-green-500 focus:bg-white focus:ring-4 focus:ring-green-50 transition-all font-bold text-lg text-gray-800 min-h-[120px] shadow-inner"
-                placeholder="Ví dụ: Ai là người phát minh hành bóng đèn dây tóc?"
-              />
-            </div>
+            {renderEditFormInner(editForm, setEditForm)}
 
-            {/* Options Grid */}
-            <div>
-              <label className="block text-xs font-black text-gray-400 uppercase tracking-widest mb-4 px-1">Các lựa chọn đáp án (Chọn 1 đáp án đúng)</label>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {editForm.options.map((opt: any, optIdx: number) => (
-                  <div 
-                    key={optIdx} 
-                    className={`group flex items-center gap-3 p-3 rounded-2xl border-2 transition-all cursor-default ${
-                      opt.is_correct 
-                      ? "bg-emerald-50 border-emerald-500 shadow-sm" 
-                      : "bg-white border-gray-100 hover:border-blue-200 focus-within:border-blue-500"
-                    }`}
-                  >
-                    <button
-                      onClick={() => {
-                        const newOpts = editForm.options.map((o: any, i: number) => ({
-                          ...o,
-                          is_correct: i === optIdx
-                        }));
-                        setEditForm({ ...editForm, options: newOpts });
-                      }}
-                      className={`shrink-0 w-12 h-12 flex items-center justify-center rounded-xl font-black text-lg transition-all transform active:scale-90 ${
-                        opt.is_correct 
-                        ? "bg-emerald-500 text-white shadow-lg shadow-emerald-200 rotate-3" 
-                        : "bg-gray-100 text-gray-400 group-hover:bg-blue-100 group-hover:text-blue-600"
-                      }`}
-                    >
-                      {opt.option_label}
-                    </button>
-                    <div className="flex-1">
-                      <input
-                        type="text"
-                        value={opt.option_text}
-                        onChange={(e) => {
-                          const newOpts = [...editForm.options];
-                          newOpts[optIdx].option_text = e.target.value;
-                          setEditForm({ ...editForm, options: newOpts });
-                        }}
-                        className="w-full bg-transparent border-none outline-none font-bold text-gray-700 placeholder:text-gray-300 placeholder:font-medium"
-                        placeholder={`Nội dung đáp án ${opt.option_label}...`}
-                      />
-                    </div>
-                    {opt.is_correct && <CheckCircle className="text-emerald-600 mr-2 animate-in zoom-in duration-300" size={20} />}
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {/* Metadata Section */}
-            <div className="bg-slate-50 p-6 rounded-2xl border border-slate-100 flex flex-col md:flex-row gap-6">
-              <div className="flex-1">
-                <label className="flex items-center gap-2 text-xs font-black text-indigo-400 uppercase tracking-widest mb-2 px-1">
-                  <div className="w-1.5 h-1.5 bg-indigo-500 rounded-full" /> Phân loại Bloom
-                </label>
-                <div className="relative">
-                  <select
-                    value={editForm.bloom_level}
-                    onChange={(e) => setEditForm({ ...editForm, bloom_level: e.target.value })}
-                    className="w-full bg-white border-2 border-white rounded-xl p-3 outline-none focus:border-indigo-500 shadow-sm transition-all text-sm font-black text-indigo-700 appearance-none cursor-pointer"
-                  >
-                    <option value="">Chưa phân loại</option>
-                    <option value="Nhớ">NHỚ (Remember)</option>
-                    <option value="Hiểu">HIỂU (Understand)</option>
-                    <option value="Vận dụng">VẬN DỤNG (Apply)</option>
-                    <option value="Phân tích">PHÂN TÍCH (Analyze)</option>
-                    <option value="Đánh giá">ĐÁNH GIÁ (Evaluate)</option>
-                    <option value="Sáng tạo">SÁNG TẠO (Create)</option>
-                  </select>
-                  <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-indigo-300">
-                    <Plus size={16} className="rotate-45" />
-                  </div>
-                </div>
-              </div>
-              <div className="flex-[2]">
-                <label className="flex items-center gap-2 text-xs font-black text-blue-400 uppercase tracking-widest mb-2 px-1">
-                  <div className="w-1.5 h-1.5 bg-blue-500 rounded-full" /> Giải thích chi tiết
-                </label>
-                <textarea
-                  value={editForm.explanation}
-                  onChange={(e) => setEditForm({ ...editForm, explanation: e.target.value })}
-                  className="w-full bg-white border-2 border-white rounded-xl p-3 outline-none focus:border-blue-500 shadow-sm transition-all text-sm font-medium text-gray-700 min-h-[60px]"
-                  placeholder="Giải thích lý do..."
-                />
-              </div>
-            </div>
-
-            {/* Footer Actions */}
+                {/* Footer Actions */}
             <div className="flex items-center justify-between pt-6 mt-4 border-t border-gray-100">
               <button
                 onClick={() => { setEditingId(null); setEditForm(null); }}

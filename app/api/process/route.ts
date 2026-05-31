@@ -255,9 +255,26 @@ ${chunk.content}
           .single();
         if (!content || !content.cleaned_text) throw new Error('Cleaned text not found. Run extract first.');
 
+        // 1. Tải PDF gốc để lấy rich text layout
+        let headingCandidates: any[] = [];
+        if (doc.file_name.toLowerCase().endsWith('.pdf')) {
+          try {
+            const { data: fileData, error: downloadError } = await supabase.storage.from('documents').download(doc.file_path);
+            if (!downloadError && fileData) {
+              const buffer = Buffer.from(await fileData.arrayBuffer());
+              const { extractRichText, extractHeadingCandidates } = await import('@/utils/document/pdfjs-extractor');
+              const richItems = await extractRichText(buffer);
+              headingCandidates = extractHeadingCandidates(richItems);
+              console.log(`[Process/detect-chapters] Found ${headingCandidates.length} heading candidates via PDF.js`);
+            }
+          } catch (e) {
+            console.error('[Process/detect-chapters] Failed to extract rich text:', e);
+          }
+        }
+
         // Dynamic import to avoid loading detector when not needed
         const { detectChapters, isDefaultChapter } = await import('@/utils/chapters/detector');
-        const chapters = await detectChapters(content.cleaned_text);
+        const chapters = await detectChapters(content.cleaned_text, headingCandidates);
         const isDefault = isDefaultChapter(chapters);
 
         // Save chapters to DB with concurrent AI summarization

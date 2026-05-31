@@ -10,7 +10,7 @@ import {
 } from "lucide-react";
 import { createClient } from "@/utils/supabase/client";
 
-type AnalysisPhase = 'analyzing' | 'select-chapters' | 'generating' | 'success' | 'error';
+type AnalysisPhase = 'loading' | 'analyzing' | 'select-chapters' | 'generating' | 'success' | 'error';
 
 interface Chapter {
   id: string;
@@ -106,7 +106,7 @@ export default function DocumentAnalysisPage({ params }: { params: Promise<{ id:
   const questionTypes = questionTypesParam ? questionTypesParam.split(',') : ['mcq'];
 
   // Phase state
-  const [phase, setPhase] = useState<AnalysisPhase>('analyzing');
+  const [phase, setPhase] = useState<AnalysisPhase>('loading');
   const [errorText, setErrorText] = useState("");
   const [quizId, setQuizId] = useState<string | null>(null);
   const router = useRouter();
@@ -270,19 +270,31 @@ export default function DocumentAnalysisPage({ params }: { params: Promise<{ id:
 
     async function startAnalysis() {
       if (!mounted) return;
-      setPhase('analyzing');
-      setProgressPercent(5);
-      setProgressText("Đang khởi tạo phân tích AI...");
 
       // Kiểm tra trạng thái hiện tại trước
       await checkAnalysisStatus();
 
+      // Nếu db trả về đã phân tích hoặc đang tải chương thì checkAnalysisStatus đã đổi phase.
+      // Chúng ta sẽ đổi phase thành analyzing nếu tài liệu đang processing ở useEffect trên,
+      // hoặc khi ta thực sự phải gọi API orchestrate.
+
       // Luôn bắt đầu polling (kể cả khi Strict Mode remount)
       pollInterval = setInterval(checkAnalysisStatus, 2000);
 
-      // Chỉ gọi API 1 lần duy nhất (guard bằng ref)
+      // Chỉ gọi API orchestrate 1 lần duy nhất (guard bằng ref)
       if (analyzeCalledRef.current) return;
       analyzeCalledRef.current = true;
+
+      const { data: docInfo } = await supabase.from('documents').select('status').eq('id', documentId).single();
+      
+      // Nếu đã analyze xong thì không cần gọi webhook nữa
+      if (docInfo && (docInfo.status === 'analyzed' || docInfo.status === 'completed' || docInfo.status === 'failed')) {
+        return; 
+      }
+
+      setPhase('analyzing');
+      setProgressPercent(5);
+      setProgressText("Đang khởi tạo phân tích AI...");
 
       fetch('/api/orchestrate', {
         method: 'POST',
@@ -539,6 +551,17 @@ export default function DocumentAnalysisPage({ params }: { params: Promise<{ id:
       </div>
 
       <div className="bg-white p-10 rounded-2xl shadow-xl border border-gray-100 flex flex-col items-center">
+
+        {/* ==========================================
+            PHASE: LOADING (Khởi tạo trang)
+            ========================================== */}
+        {phase === 'loading' && (
+          <div className="flex flex-col items-center justify-center py-20 w-full animate-fade-in-blur">
+            <Loader2 className="animate-spin text-blue-500 mb-4" size={48} />
+            <h2 className="text-xl font-bold text-gray-700">Đang tải dữ liệu...</h2>
+            <p className="text-sm text-gray-500 mt-2">Vui lòng đợi trong giây lát</p>
+          </div>
+        )}
 
         {/* ==========================================
             PHASE: ANALYZING (Phase 1)

@@ -56,6 +56,7 @@ QUY TẮC BẮT BUỘC VÀ KHÔNG ĐƯỢC VI PHẠM:
 6. ĐÚNG CẤP ĐỘ BLOOM - Phải gán đúng mức độ nhận thức theo Thang đo Bloom (Nhớ, Hiểu, Vận dụng, Phân tích, Đánh giá, Sáng tạo).
 7. ĐÚNG ĐỊNH DẠNG LOẠI CÂU HỎI - Tạo đúng loại câu hỏi được yêu cầu (mcq, true_false, fill_blank, short_answer, multi_select, matching) và tuân thủ định dạng JSON tương ứng.
 
+
 Mọi câu hỏi vi phạm quy tắc bám sát tài liệu hoặc chứa thông tin không có trong văn bản được cung cấp sẽ bị coi là lỗi nghiêm trọng.`;
 
 // ==========================================

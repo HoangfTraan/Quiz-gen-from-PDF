@@ -17,6 +17,7 @@
     "next": "^15.5.14",
     "openai": "^4.28.0",
     "pdf-parse": "^1.1.1",
+    "pdfjs-dist": "^6.0.227",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "tailwind-merge": "^2.2.1"
@@ -24,6 +25,7 @@
   "devDependencies": {
     "@types/node": "^20",
     "@types/pdf-parse": "^1.1.5",
+    "@types/pdfjs-dist": "^2.10.377",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "autoprefixer": "^10.4.23",
