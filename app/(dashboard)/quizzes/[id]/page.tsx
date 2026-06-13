@@ -13,10 +13,10 @@ export default async function QuizDetailsPage({
   searchParams
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ targetCount?: string }>;
+  searchParams: Promise<{ targetCount?: string; capped?: string; originalCount?: string }>;
 }) {
   const { id } = await params;
-  const { targetCount } = await searchParams;
+  const { targetCount, capped, originalCount } = await searchParams;
   const supabase = await createClient();
 
   // Lấy user hiện tại và role
@@ -122,7 +122,22 @@ export default async function QuizDetailsPage({
         </p>
       </div>
 
-      {targetCount && questionCount < parseInt(targetCount, 10) && (
+      {capped === 'true' && originalCount && (
+        <div className="mb-6 p-4 bg-amber-50 border border-amber-200 rounded-2xl flex items-start gap-3">
+          <div className="w-10 h-10 rounded-xl bg-amber-100/50 flex items-center justify-center flex-shrink-0 text-amber-600 font-bold">
+            ⚠️
+          </div>
+          <div>
+            <h4 className="font-bold text-amber-900 text-sm">Đã điều chỉnh số lượng câu hỏi</h4>
+            <p className="text-xs text-amber-700 mt-1 leading-relaxed">
+              Bạn yêu cầu tạo <strong className="text-amber-900">{originalCount} câu hỏi</strong> nhưng hệ thống đã <strong className="text-amber-900">tự động giảm xuống {questionCount} câu</strong> phù hợp với lượng nội dung có trong tài liệu.
+              Điều này đảm bảo <strong>100% câu hỏi đều dựa trên thông tin gốc</strong> và không có câu hỏi bịa ra ngoài tài liệu.
+            </p>
+          </div>
+        </div>
+      )}
+
+      {!capped && targetCount && questionCount < parseInt(targetCount, 10) && (
         <div className="mb-6 p-4 bg-blue-50 border border-blue-100 rounded-2xl flex items-start gap-3">
           <div className="w-10 h-10 rounded-xl bg-blue-100/50 flex items-center justify-center flex-shrink-0 text-blue-600 font-bold">
             💡

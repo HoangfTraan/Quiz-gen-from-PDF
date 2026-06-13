@@ -80,8 +80,8 @@ interface QuestionGenerationContext {
 
 export function buildQuestionGenerationPrompt(ctx: QuestionGenerationContext): string {
   const bloomInstruction = ctx.bloomLevels.length > 0
-    ? `TẤT CẢ câu hỏi PHẢI thuộc các cấp độ Bloom sau: ${ctx.bloomLevels.join(', ')}. KHÔNG ĐƯỢC tạo câu hỏi ở cấp độ khác.`
-    : `Phân bổ đa dạng theo Thang đo Bloom: Nhớ, Hiểu, Vận dụng, Phân tích, Đánh giá, Sáng tạo.`;
+    ? `TẤT CẢ câu hỏi PHẢI thuộc các cấp độ Bloom sau: ${ctx.bloomLevels.join(', ')}. YÊU CẦU BẮT BUỘC: Bạn phải phân bổ đều số lượng câu hỏi cho TỪNG cấp độ Bloom này (mỗi cấp độ phải có ít nhất 1 câu). KHÔNG ĐƯỢC bỏ sót cấp độ nào và KHÔNG ĐƯỢC tạo câu hỏi ở cấp độ khác.`
+    : `Phân bổ đa dạng và ĐỒNG ĐỀU theo Thang đo Bloom: Nhớ, Hiểu, Vận dụng, Phân tích, Đánh giá, Sáng tạo.`;
 
   const typeInstructions = buildQuestionTypeInstructions(ctx.questionTypes);
 
@@ -110,8 +110,9 @@ CẢNH BÁO TỐI QUAN TRỌNG VỀ TÍNH CHÍNH XÁC (KHÔNG ĐƯỢC PHÉP VI 
 
 YÊU CẦU:
 1. ${bloomInstruction}
-2. Câu hỏi phải rõ nghĩa, không mơ hồ.
-3. KHÔNG bịa thêm kiến thức ngoài nội dung được cung cấp.
+2. YÊU CẦU BẮT BUỘC VỀ PHÂN BỔ LOẠI CÂU HỎI: Bạn phải chia đều số lượng câu hỏi cho TẤT CẢ các loại câu hỏi được liệt kê ở phần "LOẠI CÂU HỎI CẦN TẠO" bên dưới. Tuyệt đối không được bỏ sót bất kỳ loại câu hỏi nào (mỗi loại phải có ít nhất 1 câu nếu số lượng câu hỏi cho phép).
+3. Câu hỏi phải rõ nghĩa, không mơ hồ.
+4. KHÔNG bịa thêm kiến thức ngoài nội dung được cung cấp.
 ${ctx.negativeExamples ? `\nTRÁNH LẶP LẠI CÁC LỖI SAU:\n${ctx.negativeExamples}\n` : ''}
 LOẠI CÂU HỎI CẦN TẠO:
 ${typeInstructions}
@@ -136,7 +137,7 @@ TRẢ VỀ ĐÚNG JSON:
 LƯU Ý FORMAT THEO LOẠI:
 - mcq: Dùng "options" (4 đáp án) + "correct_index" (0-3)
 - true_false: Dùng "options": ["Đúng", "Sai"] + "correct_index" (0 hoặc 1)
-- fill_blank: Câu hỏi có dấu "___" ở chỗ trống + "correct_answer" chứa đáp án
+- fill_blank: Câu hỏi BẮT BUỘC phải chứa dấu "___" (3 gạch dưới) ở chỗ cần điền + "correct_answer" chứa đáp án
 - short_answer: Câu hỏi mở + "correct_answer" chứa đáp án mẫu
 - multi_select: Dùng "options" (4-5 đáp án) + "correct_indexes" (mảng index đúng)
 - matching: Dùng "matching_pairs" (mảng {left, right})
@@ -160,7 +161,7 @@ function buildQuestionTypeInstructions(types: QuestionType[]): string {
     instructions.push('- **Đúng/Sai (true_false)**: Một mệnh đề, người dùng chọn Đúng hoặc Sai.');
   }
   if (types.includes('fill_blank')) {
-    instructions.push('- **Điền vào chỗ trống (fill_blank)**: Câu có dấu "___" thay thế từ/cụm từ quan trọng. Đáp án là từ bị thay thế.');
+    instructions.push('- **Điền vào chỗ trống (fill_blank)**: BẮT BUỘC phải chứa ký hiệu "___" (3 dấu gạch dưới) trực tiếp trong nội dung câu hỏi để đại diện cho từ/cụm từ bị khuyết (Ví dụ: "Hà Nội là ___ của Việt Nam"). Tuyệt đối không dùng định dạng câu hỏi mở.');
   }
   if (types.includes('short_answer')) {
     instructions.push('- **Trả lời ngắn (short_answer)**: Câu hỏi mở, đáp án là 1-2 câu ngắn gọn.');

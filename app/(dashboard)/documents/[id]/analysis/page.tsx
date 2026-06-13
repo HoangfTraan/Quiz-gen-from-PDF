@@ -95,6 +95,17 @@ function findSectionNode(sections: any[], title: string): any | null {
   return null;
 }
 
+// Đếm tổng số mục con đệ quy trong hierarchy
+function countAllSections(sections: any[]): number {
+  if (!sections) return 0;
+  let count = 0;
+  for (const sec of sections) {
+    count += 1;
+    if (sec.sections) count += countAllSections(sec.sections);
+  }
+  return count;
+}
+
 export default function DocumentAnalysisPage({ params }: { params: Promise<{ id: string }> }) {
   const resolvedParams = use(params);
   const documentId = resolvedParams.id;
@@ -126,6 +137,10 @@ export default function DocumentAnalysisPage({ params }: { params: Promise<{ id:
   // Generation progress
   const [genProgressText, setGenProgressText] = useState("Đang chuẩn bị...");
   const [genProgressPercent, setGenProgressPercent] = useState(0);
+
+  // Capped question tracking
+  const [wasCapped, setWasCapped] = useState(false);
+  const [cappedOriginalCount, setCappedOriginalCount] = useState(0);
 
   // Cancel
   const [isCancelling, setIsCancelling] = useState(false);
@@ -445,6 +460,46 @@ export default function DocumentAnalysisPage({ params }: { params: Promise<{ id:
   };
 
   // ==========================================
+  // ESTIMATION: Tính toán số câu hỏi hợp lý
+  // ==========================================
+  const selectedChaps = chapters.filter(c => selectedChapterIds.has(c.id));
+
+  // Signal 1: Tổng số từ
+  let totalEstWords = 0;
+  let totalEstContentLength = 0;
+  for (const c of selectedChaps) {
+    const text = c.content || '';
+    totalEstContentLength += text.length;
+    totalEstWords += text.split(/\s+/).filter(Boolean).length;
+  }
+  const estimateByWords = Math.floor(totalEstWords / 50);
+
+  // Signal 2: Số mục trong đề cương
+  let totalEstSections = 0;
+  for (const c of selectedChaps) {
+    if (c.metadata?.hierarchy) {
+      totalEstSections += countAllSections(c.metadata.hierarchy);
+    }
+  }
+  const estimateBySections = Math.floor(totalEstSections * 2.5);
+
+  // Signal 3: Mô phỏng số chunks backend (CHUNK_SIZE=3000, OVERLAP=300)
+  let totalEstChunks = 0;
+  for (const c of selectedChaps) {
+    const len = c.content?.length || 0;
+    if (len > 0) {
+      totalEstChunks += Math.max(1, Math.ceil(len / (3000 - 300)));
+    }
+  }
+  const estimateByChunks = totalEstChunks * 4;
+
+  // Kết hợp: max(word, section) trung bình với chunk
+  const structureEstimate = Math.max(estimateByWords, estimateBySections);
+  const maxReasonableQuestions = Math.max(1, Math.round((structureEstimate + estimateByChunks) / 2));
+  const isOverLimit = selectedChapterIds.size > 0 && questionCount > Math.ceil(maxReasonableQuestions * 1.5);
+  const effectiveQuestionCount = isOverLimit ? maxReasonableQuestions : questionCount;
+
+  // ==========================================
   // PHASE 2: GENERATE QUESTIONS
   // ==========================================
   const generateCalledRef = useRef(false);
@@ -453,6 +508,14 @@ export default function DocumentAnalysisPage({ params }: { params: Promise<{ id:
     if (generateCalledRef.current) return;
     if (selectedChapterIds.size === 0) return;
     generateCalledRef.current = true;
+
+    // Lưu lại thông tin capped để hiển thị
+    const actualCount = effectiveQuestionCount;
+    const isCapped = isOverLimit;
+    if (isCapped) {
+      setWasCapped(true);
+      setCappedOriginalCount(questionCount);
+    }
 
     setPhase('generating');
     setGenProgressPercent(5);
@@ -470,11 +533,11 @@ export default function DocumentAnalysisPage({ params }: { params: Promise<{ id:
           if (qz) {
             if (roleLoadingRef.current) return;
             if (canReviewRef.current) {
-              router.push(`/quizzes/${qz.id}?targetCount=${questionCount}`);
+              router.push(`/quizzes/${qz.id}?targetCount=${actualCount}${isCapped ? `&capped=true&originalCount=${questionCount}` : ''}`);
             } else if (canTakeRef.current) {
-              router.push(`/quizzes/${qz.id}/start?targetCount=${questionCount}`);
+              router.push(`/quizzes/${qz.id}/start?targetCount=${actualCount}${isCapped ? `&capped=true&originalCount=${questionCount}` : ''}`);
             } else {
-              router.push(`/quizzes/${qz.id}?targetCount=${questionCount}`);
+              router.push(`/quizzes/${qz.id}?targetCount=${actualCount}${isCapped ? `&capped=true&originalCount=${questionCount}` : ''}`);
             }
           }
           return;
@@ -493,7 +556,7 @@ export default function DocumentAnalysisPage({ params }: { params: Promise<{ id:
         if (qz?.id) {
           const { count } = await supabase.from('questions').select('id', { count: 'exact', head: true }).eq('quiz_id', qz.id);
           const qCount = count || 0;
-          const targetQ = Math.max(5, Math.min(200, questionCount));
+          const targetQ = Math.max(5, Math.min(200, actualCount));
           setGenProgressText(`Đang sinh câu hỏi từ AI (${qCount}/${targetQ} câu)...`);
           const pct = Math.floor(10 + (qCount / targetQ) * 85);
           setGenProgressPercent(Math.min(99, pct));
@@ -511,7 +574,7 @@ export default function DocumentAnalysisPage({ params }: { params: Promise<{ id:
         body: JSON.stringify({
           documentId,
           phase: 'generate',
-          questionCount,
+          questionCount: actualCount,
           bloomLevels,
           questionTypes,
           selectedChapterIds: Array.from(selectedChapterIds),
@@ -711,27 +774,18 @@ export default function DocumentAnalysisPage({ params }: { params: Promise<{ id:
               </div>
             </div>
 
-            {(() => {
-              const selectedContentLength = chapters
-                .filter(c => selectedChapterIds.has(c.id))
-                .reduce((sum, c) => sum + (c.content?.length || 0), 0);
-              const maxReasonableQuestions = Math.max(1, Math.floor(selectedContentLength / 500));
-              const isOverLimit = selectedChapterIds.size > 0 && questionCount > maxReasonableQuestions;
-              if (!isOverLimit) return null;
-              const contentKB = (selectedContentLength / 1024).toFixed(1);
-              return (
-                <div className="mb-5 p-4 bg-amber-50 border border-amber-200 rounded-xl flex items-start gap-3 text-left w-full">
-                  <AlertOctagon size={20} className="text-amber-500 flex-shrink-0 mt-0.5" />
-                  <div>
-                    <p className="text-sm font-bold text-amber-800">Cảnh báo: Số lượng câu hỏi lớn</p>
-                    <p className="text-xs text-amber-600 mt-1 leading-relaxed">
-                      Bạn đang yêu cầu tạo <span className="font-bold">{questionCount} câu hỏi</span> từ nội dung khoảng <span className="font-bold">{contentKB} KB</span> văn bản (ước tính tối đa hợp lý: ~<span className="font-bold">{maxReasonableQuestions} câu</span>). 
-                      Hệ thống sẽ nỗ lực tối đa để sinh nhiều câu hỏi nhất có thể nhưng cam kết <span className="font-bold text-amber-700 underline">chỉ sử dụng thông tin gốc và TUYỆT ĐỐI không tự bịa (hallucinate) hay tạo câu hỏi ảo ngoài tài liệu</span>.
-                    </p>
-                  </div>
+            {isOverLimit && (
+              <div className="mb-5 p-4 bg-amber-50 border border-amber-200 rounded-xl flex items-start gap-3 text-left w-full">
+                <AlertOctagon size={20} className="text-amber-500 flex-shrink-0 mt-0.5" />
+                <div>
+                  <p className="text-sm font-bold text-amber-800">Tự động điều chỉnh số lượng câu hỏi</p>
+                  <p className="text-xs text-amber-600 mt-1 leading-relaxed">
+                    Bạn yêu cầu <span className="font-bold">{questionCount} câu hỏi</span> nhưng nội dung chỉ có khoảng <span className="font-bold">{(totalEstContentLength / 1024).toFixed(1)} KB</span> văn bản ({totalEstWords.toLocaleString()} từ, {totalEstSections} mục, ~{totalEstChunks} đoạn xử lý).
+                    Hệ thống sẽ <span className="font-bold text-amber-800">tự động giảm xuống {maxReasonableQuestions} câu hỏi</span> để đảm bảo chất lượng và <span className="font-bold text-amber-700 underline">TUYỆT ĐỐI không tự bịa (hallucinate) hay tạo câu hỏi ảo ngoài tài liệu</span>.
+                  </p>
                 </div>
-              );
-            })()}
+              </div>
+            )}
 
             {/* Generate button */}
             <button
@@ -744,7 +798,8 @@ export default function DocumentAnalysisPage({ params }: { params: Promise<{ id:
               }`}
             >
               <Sparkles size={20} />
-              Tạo {questionCount} câu hỏi từ {selectedChapterIds.size} chương đã chọn
+              Tạo {effectiveQuestionCount} câu hỏi từ {selectedChapterIds.size} chương đã chọn
+              {isOverLimit && <span className="text-blue-200 text-xs ml-1">(giảm từ {questionCount})</span>}
             </button>
           </div>
         )}
@@ -778,9 +833,18 @@ export default function DocumentAnalysisPage({ params }: { params: Promise<{ id:
               </div>
             </div>
 
-            <p className="text-xs text-gray-400 mb-6">
+            <p className="text-xs text-gray-400 mb-4">
               Đang tạo câu hỏi từ {selectedChapterIds.size} chương đã chọn...
             </p>
+
+            {wasCapped && (
+              <div className="w-full max-w-sm mb-6 p-3 bg-blue-50 border border-blue-200 rounded-lg flex items-start gap-2">
+                <Info size={16} className="text-blue-500 flex-shrink-0 mt-0.5" />
+                <p className="text-xs text-blue-700 leading-relaxed">
+                  Số câu hỏi đã được điều chỉnh từ <span className="font-bold">{cappedOriginalCount}</span> xuống <span className="font-bold">{effectiveQuestionCount} câu</span> để đảm bảo độ chính xác.
+                </p>
+              </div>
+            )}
 
             <button
               onClick={handleCancelClick}

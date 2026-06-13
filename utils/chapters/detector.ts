@@ -62,7 +62,7 @@ const CHAPTER_PATTERNS = [
 const NUMBERED_SECTION_PATTERN = /^[\s]*(\d+)\.\s+([A-ZÀ-Ỹ][^\n]{5,})/gm;
 
 // ==========================================
-// REGEX DETECTION
+// REGEX
 // ==========================================
 
 interface RegexMatch {
@@ -120,10 +120,10 @@ function extractSectionsFromContent(content: string, chapterTitle?: string): Out
   const chapterNum = chapterTitle ? inferChapterNumber(chapterTitle) : null;
   const lines = content.split('\n');
 
-  // Regex patterns
-  // 1. Decimal headings like "1.1 Title", "1.1.1 Title", allowing optional space after dot
+  // Các mẫu Regex
+  // 1. Tiêu đề thập phân như "1.1 Tiêu đề", "1.1.1 Tiêu đề", cho phép tùy chọn khoảng trắng sau dấu chấm
   const DECIMAL_HEADING_RE = /^[\s]*(\d+\.\d+(?:\.\d+)?)\.?\s*([A-ZÀ-Ỹa-zà-ỹ].*)/;
-  // 2. Single number headings like "1. Title"
+  // 2. Tiêu đề số đơn như "1. Tiêu đề"
   const SINGLE_HEADING_RE = /^[\s]*(\d+)\.\s+([A-ZÀ-Ỹ][^\n]{4,})/;
 
   interface HeadingEntry {
@@ -133,7 +133,7 @@ function extractSectionsFromContent(content: string, chapterTitle?: string): Out
     lineIndex: number;
   }
 
-  // --- OPTION A: Look for Decimal Headings (Slide PDF style) ---
+  // --- TÙY CHỌN A: Tìm kiếm Tiêu đề Thập phân (Phong cách Slide PDF) ---
   const decimalEntries: HeadingEntry[] = [];
   const seenNumbers = new Set<string>();
 
@@ -157,11 +157,11 @@ function extractSectionsFromContent(content: string, chapterTitle?: string): Out
     });
   }
 
-  // If we have decimal entries, filter and build hierarchy
+  // Nếu có các mục thập phân, hãy lọc và xây dựng hệ thống phân cấp
   if (decimalEntries.length > 0) {
-    // Determine the expected parent prefix.
-    // If chapterNum is known, we expect the prefix to be chapterNum (e.g. Chapter 2 -> "2")
-    // If not, we infer the prefix from the first decimal entry's first part.
+    // Xác định tiền tố gốc mong đợi.
+    // Nếu biết chapterNum, mong đợi tiền tố là chapterNum (VD: Chương 2 -> "2")
+    // Nếu không, suy luận tiền tố từ phần đầu tiên của mục thập phân đầu tiên.
     let expectedPrefix: string | null = chapterNum !== null ? chapterNum.toString() : null;
     if (expectedPrefix === null && decimalEntries.length > 0) {
       expectedPrefix = decimalEntries[0].number.split('.')[0];
@@ -173,7 +173,7 @@ function extractSectionsFromContent(content: string, chapterTitle?: string): Out
         return parts[0] === expectedPrefix;
       });
 
-      // Dedup: only keep the first occurrence of each decimal number
+      // Dedup: chỉ giữ lại lần xuất hiện đầu tiên của mỗi số thập phân
       const dedupedDecimals: HeadingEntry[] = [];
       const seen = new Set<string>();
       for (const entry of filteredDecimals) {
@@ -196,7 +196,7 @@ function extractSectionsFromContent(content: string, chapterTitle?: string): Out
             currentL2.sections.push({ title: entry.title });
           }
         }
-        // If we found at least 1 section, return it
+        // Nếu tìm thấy ít nhất 1 mục, hãy trả về nó
         if (topLevel.length > 0) {
           return topLevel;
         }
@@ -204,7 +204,7 @@ function extractSectionsFromContent(content: string, chapterTitle?: string): Out
     }
   }
 
-  // --- OPTION B: Look for Sequential Single Number Headings (Textbook style) ---
+  // --- TÙY CHỌN B: Tìm kiếm Tiêu đề Số Đơn Tuần tự (Phong cách Sách giáo khoa) ---
   const sections: OutlineSection[] = [];
   let currentSection: OutlineSection | null = null;
   let lastMainNumber = 0;
@@ -215,15 +215,15 @@ function extractSectionsFromContent(content: string, chapterTitle?: string): Out
     if (!trimmed || trimmed.length < 3) continue;
     if (extractionStopped) break;
 
-    // Check for decimal sub-section if we already have a parent section active
+    // Kiểm tra mục con thập phân nếu đã có mục cha đang hoạt động
     const decimalMatch = trimmed.match(DECIMAL_HEADING_RE);
     if (decimalMatch && currentSection) {
       const number = decimalMatch[1];
       const parts = number.split('.');
-      // If it's a decimal under the current sequential number (e.g. current is "1", number is "1.1" or "1.1.1")
+      // Nếu nó là số thập phân dưới số tuần tự hiện tại (VD: hiện tại là "1", số là "1.1" hoặc "1.1.1")
       if (parts[0] === lastMainNumber.toString()) {
         currentSection.sections = currentSection.sections || [];
-        // Prevent duplicate sub-sections
+        // Ngăn chặn các mục con trùng lặp
         const subTitle = cleanTOCLineTitle(trimmed);
         if (!currentSection.sections.some(s => s.title === subTitle)) {
           currentSection.sections.push({ title: subTitle });
@@ -232,7 +232,7 @@ function extractSectionsFromContent(content: string, chapterTitle?: string): Out
       }
     }
 
-    // Check for main section
+    // Kiểm tra phần chính
     const mainMatch = trimmed.match(SINGLE_HEADING_RE);
     if (mainMatch) {
       const num = parseInt(mainMatch[1], 10);
@@ -241,7 +241,7 @@ function extractSectionsFromContent(content: string, chapterTitle?: string): Out
         sections.push(currentSection);
         lastMainNumber = num;
       } else if (num > lastMainNumber + 1) {
-        // If number skips (e.g., 1 -> 3), stop extraction to avoid matching random lists in the document
+        // Nếu số bị nhảy (VD: 1 -> 3), dừng trích xuất để tránh khớp với các danh sách ngẫu nhiên trong tài liệu
         extractionStopped = true;
       }
     }
@@ -790,10 +790,10 @@ ${previewText}
 
       let startPos = -1;
 
-      // Progressive Regex search for the chapter title in the body
-      // We take the first few words of the title to make matching flexible
+      // Tìm kiếm tăng dần bằng Regex cho tiêu đề chương trong phần nội dung
+      // Lấy một vài từ đầu tiên của tiêu đề để làm cho việc khớp linh hoạt hơn
       const titleWords = ch.title.trim().split(/\s+/).slice(0, 3);
-      // Join with \s+ to allow newlines and multiple spaces between words
+      // Nối với \s+ để cho phép xuống dòng và nhiều khoảng trắng giữa các từ
       const titlePattern = titleWords.map((w: string) => w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('\\s+');
       const searchPattern = new RegExp(`(?:^|\\n)\\s*(?:${titlePattern})`, 'i');
 
@@ -807,7 +807,7 @@ ${previewText}
       }
 
       if (startPos === -1) {
-        // FALLBACK: If we couldn't find the title, just place it 50 chars after the previous chapter
+        // FALLBACK: Nếu không thể tìm thấy tiêu đề, chỉ cần đặt nó 50 ký tự sau chương trước đó
         startPos = searchFromChar + 50;
         searchFromChar = startPos;
       }
@@ -948,7 +948,7 @@ async function validateRegexChaptersWithAI(text: string, regexChapters: Detected
   const previewText = text.substring(0, previewLength);
   const detectedTitles = regexChapters.map(c => c.title);
 
-  // Generate Chapter Proof Map
+  // Tạo Bản đồ Bằng chứng Chương
   let chapterProofMap = '';
   for (let i = 0; i < regexChapters.length; i++) {
     const ch = regexChapters[i];
@@ -1067,14 +1067,14 @@ function detectByPdfJs(text: string, headingCandidates: { text: string; fontSize
 
   if (chapters.length < 2) return [];
 
-  // Update endPosition
+  // Cập nhật endPosition
   for (let i = 0; i < chapters.length; i++) {
     const next = chapters[i + 1];
     chapters[i].endPosition = next ? next.startPosition : text.length;
     chapters[i].content = text.substring(chapters[i].startPosition, chapters[i].endPosition).trim();
   }
   
-  // Filter noise
+  // Lọc nhiễu
   const validChapters = chapters.filter(c => c.content.length > 50);
   
   // Bổ sung hierarchy
@@ -1111,7 +1111,7 @@ export async function detectChapters(text: string, headingCandidates?: { text: s
   if (regexResult.length >= 2) {
     console.log(`[ChapterDetector] Super-Regex successfully extracted ${regexResult.length} chapters.`);
 
-    // Step 2: Validate Regex Result with AI
+    // Bước 2: Thẩm định kết quả Regex bằng AI
     console.log(`[ChapterDetector] Validating Regex result with AI...`);
     const isValid = await validateRegexChaptersWithAI(text, regexResult);
 
