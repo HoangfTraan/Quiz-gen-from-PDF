@@ -152,8 +152,8 @@ export default function DashboardPage() {
   return (
     <div className="space-y-8">
       <div>
-        <h1 className="text-2xl font-extrabold text-gray-900 leading-tight">Tổng quan (Dashboard)</h1>
-        <p className="text-sm text-gray-400 mt-1">Theo dõi hoạt động học tập và tài nguyên của bạn</p>
+        <h1 className="text-xl sm:text-2xl font-extrabold text-gray-900 leading-tight">Tổng quan</h1>
+        <p className="text-xs sm:text-sm text-gray-400 mt-1">Theo dõi hoạt động học tập và tài nguyên của bạn</p>
       </div>
       
       <div className={`grid grid-cols-1 md:grid-cols-2 ${gridCols} gap-6`}>

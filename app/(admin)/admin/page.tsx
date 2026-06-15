@@ -15,7 +15,6 @@ export default async function AdminDashboardPage() {
     .select('*', { count: 'exact', head: true })
     .gte('created_at', today.toISOString());
   
-  const { data: failedDocs } = await supabase.from('documents').select('id, title, created_at').eq('status', 'failed').limit(5);
 
   return (
     <div>
@@ -52,23 +51,6 @@ export default async function AdminDashboardPage() {
         </div>
       </div>
 
-      <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6">
-         <h2 className="text-xl font-bold mb-4">Tài liệu gặp lỗi xử lý gần đây</h2>
-         {(!failedDocs || failedDocs.length === 0) ? (
-           <div className="bg-gray-50 p-8 rounded-xl border border-dashed border-gray-300 flex items-center justify-center">
-              <p className="text-gray-500 font-medium">Chưa có tài liệu lỗi nào hôm nay 🎉</p>
-           </div>
-         ) : (
-           <div className="space-y-3">
-             {failedDocs.map(doc => (
-               <div key={doc.id} className="p-3 bg-red-50 text-red-800 rounded border border-red-100 flex justify-between items-center">
-                 <span className="font-semibold">{doc.title}</span>
-                 <span className="text-sm">{new Date(doc.created_at).toLocaleDateString("vi-VN")}</span>
-               </div>
-             ))}
-           </div>
-         )}
-      </div>
     </div>
   );
 }

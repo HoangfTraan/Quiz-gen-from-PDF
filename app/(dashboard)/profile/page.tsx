@@ -246,13 +246,13 @@ export default function ProfilePage() {
   }
 
   return (
-    <div className="animate-page-fade max-w-3xl mx-auto py-8">
-      <h1 className="text-3xl font-black text-gray-900 mb-8 tracking-tight">Hồ sơ cá nhân</h1>
+    <div className="animate-page-fade max-w-3xl mx-auto py-2 sm:py-8">
+      <h1 className="text-2xl sm:text-3xl font-black text-gray-900 mb-6 sm:mb-8 tracking-tight">Hồ sơ cá nhân</h1>
 
-      <div className="bg-white p-10 rounded-3xl shadow-xl shadow-gray-200/50 border border-gray-100 flex flex-col md:flex-row gap-10 items-start mb-10 transition-all hover:shadow-2xl hover:shadow-gray-200/60">
+      <div className="bg-white p-5 sm:p-10 rounded-2xl sm:rounded-3xl shadow-xl shadow-gray-200/50 border border-gray-100 flex flex-col md:flex-row gap-6 sm:gap-10 items-start mb-6 sm:mb-10 transition-all hover:shadow-2xl hover:shadow-gray-200/60">
         <div className="flex flex-col items-center gap-4 w-full md:w-1/3 group">
           <div className="relative">
-            <div className="w-40 h-40 bg-gradient-to-br from-blue-50 to-indigo-50 border-4 border-white shadow-xl rounded-full flex justify-center items-center overflow-hidden transition-transform group-hover:scale-105 duration-500">
+            <div className="w-28 h-28 sm:w-40 sm:h-40 bg-gradient-to-br from-blue-50 to-indigo-50 border-4 border-white shadow-xl rounded-full flex justify-center items-center overflow-hidden transition-transform group-hover:scale-105 duration-500">
               {uploading ? (
                 <div className="absolute inset-0 bg-white/60 backdrop-blur-sm flex items-center justify-center z-10">
                   <Loader2 className="animate-spin text-blue-600" size={32} />
@@ -262,7 +262,7 @@ export default function ProfilePage() {
               {avatarUrl ? (
                 <img src={avatarUrl} alt="Avatar" className="w-full h-full object-cover" />
               ) : (
-                <span className="text-6xl font-black text-blue-600/30 select-none">{initial}</span>
+                <span className="text-5xl sm:text-6xl font-black text-blue-600/30 select-none">{initial}</span>
               )}
             </div>
             
@@ -353,7 +353,7 @@ export default function ProfilePage() {
         </div>
       </div>
 
-      <div className="bg-white p-10 rounded-3xl shadow-xl shadow-gray-200/50 border border-gray-100 transition-all hover:shadow-2xl">
+      <div className="bg-white p-5 sm:p-10 rounded-2xl sm:rounded-3xl shadow-xl shadow-gray-200/50 border border-gray-100 transition-all hover:shadow-2xl">
         <h2 className="text-xl font-black text-gray-900 mb-8 flex items-center gap-3">
           <div className="p-2 bg-orange-100 text-orange-600 rounded-xl">
             <Shield size={20} />
@@ -373,7 +373,7 @@ export default function ProfilePage() {
         </div>
       </div>
 
-      <div className="bg-white p-10 rounded-3xl shadow-xl shadow-gray-200/50 border border-gray-100 transition-all hover:shadow-2xl mt-10">
+      <div className="bg-white p-5 sm:p-10 rounded-2xl sm:rounded-3xl shadow-xl shadow-gray-200/50 border border-gray-100 transition-all hover:shadow-2xl mt-6 sm:mt-10">
         <h2 className="text-xl font-black text-gray-900 mb-8 flex items-center gap-3">
           <div className="p-2 bg-purple-100 text-purple-600 rounded-xl">
             <Shield size={20} />

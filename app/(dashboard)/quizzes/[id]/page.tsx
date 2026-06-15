@@ -30,21 +30,8 @@ export default async function QuizDetailsPage({
   const isAuthor = canAuthorQuiz(role);
   const isLearner = canTakePublishedQuiz(role);
 
-  // Chỉ teacher và learner được truy cập
-  if (!isAuthor && !isLearner) {
-    return (
-      <div className="max-w-lg mx-auto mt-20 p-10 bg-white rounded-2xl border border-amber-100 shadow text-center">
-        <ShieldOff size={48} className="text-amber-400 mx-auto mb-4" />
-        <h2 className="text-xl font-extrabold text-gray-800 mb-2">Không có quyền truy cập</h2>
-        <p className="text-gray-500 mb-6">
-          Chức năng này chỉ dành cho tài khoản <strong>Giáo viên</strong> hoặc <strong>Người học</strong>.
-        </p>
-        <Link href="/dashboard" className="px-6 py-2.5 bg-blue-600 text-white font-bold rounded-xl hover:bg-blue-700 transition-colors">
-          Về trang chủ
-        </Link>
-      </div>
-    );
-  }
+  // Bỏ qua kiểm tra role ban đầu vì người dùng mặc định cũng có thể xem bộ đề CỦA MÌNH
+  // Quyền truy cập sẽ được kiểm tra ở bước check quyền sở hữu (quiz.user_id !== user.id) bên dưới
 
   // Người học redirect thẳng vào trang làm bài thi
   if (isLearner) {
@@ -107,7 +94,7 @@ export default async function QuizDetailsPage({
         </Link>
         <div className="flex flex-wrap gap-2">
           {/* Xóa / Lưu nháp / Xuất bản: chỉ teacher owner */}
-          <QuizActions quizId={id} initialStatus={quiz.status} questionCount={questionCount} />
+          {isAuthor && <QuizActions quizId={id} initialStatus={quiz.status} questionCount={questionCount} />}
         </div>
       </div>
 

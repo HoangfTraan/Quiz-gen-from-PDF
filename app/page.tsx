@@ -16,9 +16,6 @@ export default function LandingPage() {
       </header>
       
       <main className="flex-1 flex flex-col items-center justify-center p-6 text-center">
-         <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-blue-100 text-blue-700 font-bold text-sm mb-6 animate-fade-in-blur">
-            <Sparkles size={16} /> Phiên bản Beta 1.0
-         </div>
          <h1 className="text-5xl md:text-7xl font-black text-gray-900 tracking-tight leading-tight mb-6 max-w-4xl text-balance">
             Biến tài liệu của bạn thành <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-600 to-purple-600">Câu Hỏi Trắc Nghiệm</span>
          </h1>

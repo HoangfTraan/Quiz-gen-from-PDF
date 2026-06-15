@@ -25,15 +25,15 @@ export default async function HistoryPage(props: {
   if (!hasAccess) {
     return (
       <div className="animate-page-fade">
-        <h1 className="text-2xl font-extrabold text-gray-800 flex items-center gap-3 mb-8">
+        <h1 className="text-xl sm:text-2xl font-extrabold text-gray-800 flex items-center gap-3 mb-8">
           <HistoryIcon className="text-blue-600" /> Lịch sử làm bài
         </h1>
-        <div className="flex flex-col items-center justify-center py-24 bg-white rounded-2xl border border-amber-200 text-center px-6">
+        <div className="flex flex-col items-center justify-center py-16 sm:py-24 bg-white rounded-2xl border border-amber-200 text-center px-6">
           <GraduationCap size={52} className="text-amber-400 mb-4" />
-          <h2 className="text-xl font-extrabold text-gray-800 mb-2">
+          <h2 className="text-lg sm:text-xl font-extrabold text-gray-800 mb-2">
             Tính năng dành riêng cho Người học
           </h2>
-          <p className="text-gray-500 max-w-md">
+          <p className="text-gray-500 max-w-md text-sm sm:text-base">
             Chỉ tài khoản được cấp quyền <strong>Người học</strong> mới có thể
             xem lịch sử làm bài và điểm số. Vui lòng liên hệ admin để được
             phân quyền.
@@ -74,13 +74,14 @@ export default async function HistoryPage(props: {
   return (
     <div className="animate-page-fade">
       <div className="flex justify-between items-center mb-6">
-        <h1 className="text-2xl font-extrabold text-gray-800 flex items-center gap-3">
+        <h1 className="text-xl sm:text-2xl font-extrabold text-gray-800 flex items-center gap-3">
           <HistoryIcon className="text-blue-600" /> Lịch sử làm bài
         </h1>
       </div>
 
       <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-        <div className="min-w-full divide-y divide-gray-200">
+        {/* DESKTOP TABLE */}
+        <div className="hidden md:block min-w-full divide-y divide-gray-200">
           <table className="min-w-full divide-y divide-gray-200">
             <thead className="bg-gray-50">
               <tr>
@@ -169,6 +170,58 @@ export default async function HistoryPage(props: {
               )}
             </tbody>
           </table>
+        </div>
+
+        {/* MOBILE CARD LIST */}
+        <div className="md:hidden divide-y divide-gray-100">
+          {history.length === 0 ? (
+            <div className="px-4 py-12 text-center text-gray-500 font-medium">
+              Bạn chưa thực hiện bài thi nào.{" "}
+              <Link href="/quizzes" className="text-blue-600 hover:underline font-bold">
+                Vào Bộ câu hỏi làm ngay!
+              </Link>
+            </div>
+          ) : (
+            history.map((record) => {
+              const ratio =
+                record.total_questions > 0
+                  ? record.total_correct / record.total_questions
+                  : 0;
+              return (
+                <Link
+                  key={record.id}
+                  href={`/attempts/${record.id}/result`}
+                  className="block p-4 hover:bg-gray-50 active:bg-gray-100 transition-colors animate-page-fade"
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex-1 min-w-0">
+                      <p className="font-bold text-gray-800 text-sm truncate">
+                        {record.quizzes?.title || "Bộ đề không xác định"}
+                      </p>
+                      <div className="flex items-center gap-1.5 mt-1 text-xs text-gray-400">
+                        <Clock size={12} />
+                        {new Date(
+                          record.started_at || record.submitted_at || Date.now()
+                        ).toLocaleString("vi-VN")}
+                      </div>
+                    </div>
+                    <span
+                      className={`px-2.5 py-1 text-xs font-black rounded-full border items-center gap-1 flex shrink-0 ${
+                        ratio >= 0.8
+                          ? "bg-green-50 border-green-200 text-green-700"
+                          : ratio >= 0.5
+                          ? "bg-orange-50 border-orange-200 text-orange-700"
+                          : "bg-red-50 border-red-200 text-red-700"
+                      }`}
+                    >
+                      <Award size={12} />
+                      {record.total_correct}/{record.total_questions}
+                    </span>
+                  </div>
+                </Link>
+              );
+            })
+          )}
         </div>
 
         <Pagination

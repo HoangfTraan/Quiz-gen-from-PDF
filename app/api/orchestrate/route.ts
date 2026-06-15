@@ -282,7 +282,7 @@ async function generateQuestionsFromChapters(
     }
 
     // Chunk nội dung từng chương và tạo câu hỏi
-    const CHUNK_SIZE = 3000; // 3000 ký tự per chunk (tăng từ 1500)
+    const CHUNK_SIZE = 3000; // 3000 ký tự per chunk
     const OVERLAP = 300;
     let totalInserted = 0;
 
@@ -291,7 +291,8 @@ async function generateQuestionsFromChapters(
         .from('questions')
         .select('question_text')
         .in('moderation_status', ['flagged', 'error'])
-        .limit(5);
+        .order('created_at', { ascending: false })
+        .limit(20); //trích xuất tối đa 20 câu hỏi bị lỗi để đưa vào Prompt, hệ thống sẽ luôn chọn ra 20 câu hỏi bị lỗi MỚI NHẤT
 
     const negativeExamples = badSamples && badSamples.length > 0
         ? badSamples.map((q: any) => `- TRÁNH: ${q.question_text}`).join('\n')

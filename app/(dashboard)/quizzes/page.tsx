@@ -17,21 +17,20 @@ export default async function QuizzesPage() {
 
   const role = await getUserRole(user.id);
 
-  // Chỉ teacher và learner được truy cập trang này
-  if (!canAuthorQuiz(role) && !canTakePublishedQuiz(role)) {
+  // Lấy role của user, admin không được phép truy cập
+  if (role === "admin") {
     return (
       <div className="max-w-lg mx-auto mt-20 p-10 bg-white rounded-2xl border border-amber-100 shadow text-center">
         <ShieldOff size={48} className="text-amber-400 mx-auto mb-4" />
         <h2 className="text-xl font-extrabold text-gray-800 mb-2">Không có quyền truy cập</h2>
         <p className="text-gray-500 mb-6">
-          Chức năng Bộ câu hỏi chỉ dành cho tài khoản có vai trò <strong>Giáo viên</strong> hoặc <strong>Người học</strong>.<br />
-          Liên hệ admin để được cấp quyền.
+          Trang này không dành cho Admin. Vui lòng quay lại trang Quản trị.
         </p>
         <Link
-          href="/dashboard"
-          className="px-6 py-2.5 bg-blue-600 text-white font-bold rounded-xl hover:bg-blue-700 transition-colors"
+          href="/admin"
+          className="px-6 py-2.5 bg-purple-600 text-white font-bold rounded-xl hover:bg-purple-700 transition-colors"
         >
-          Về trang chủ
+          Về trang Quản trị
         </Link>
       </div>
     );

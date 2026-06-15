@@ -53,14 +53,16 @@ export default async function DocumentDetailsPage({ params }: { params: Promise<
         </Link>
       </div>
 
-      <div className="flex justify-between items-start mb-6">
-        <div>
-          <h1 className="text-3xl font-extrabold text-gray-800 flex items-center gap-3">
-            <FileText className="text-blue-600" /> {doc.title}
+      <div className="flex flex-col sm:flex-row sm:justify-between sm:items-start gap-4 mb-6">
+        <div className="min-w-0">
+          <h1 className="text-xl sm:text-3xl font-extrabold text-gray-800 flex items-center gap-2 sm:gap-3">
+            <FileText className="text-blue-600 shrink-0" size={24} /> <span className="break-words">{doc.title}</span>
           </h1>
-          <p className="text-gray-500 mt-2 font-medium">
-            Môn học: {doc.subjects?.name || "Không phân loại"} • Trạng thái:
-            <span className={`inline-block ml-2 px-2 py-0.5 rounded text-sm ${doc.status === 'completed' ? 'bg-green-100 text-green-700' :
+          <div className="text-gray-500 mt-2 font-medium text-sm sm:text-base flex flex-wrap items-center gap-1">
+            <span>Môn học: {doc.subjects?.name || "Không phân loại"}</span>
+            <span>•</span>
+            <span className="flex items-center gap-1">Trạng thái:
+            <span className={`inline-block ml-1 px-2 py-0.5 rounded text-xs sm:text-sm ${doc.status === 'completed' ? 'bg-green-100 text-green-700' :
                 doc.status === 'failed' ? 'bg-red-100 text-red-700' :
                   'bg-yellow-100 text-yellow-700'
               }`}>
@@ -68,7 +70,8 @@ export default async function DocumentDetailsPage({ params }: { params: Promise<
                 doc.status === 'analyzed' ? 'Đã phân tích' :
                 doc.status === 'failed' ? 'Thất bại' : 'Đang xử lý...'}
             </span>
-          </p>
+            </span>
+          </div>
         </div>
         {doc.status === 'completed' && (
           canTake ? (
@@ -76,7 +79,7 @@ export default async function DocumentDetailsPage({ params }: { params: Promise<
           ) : (
             <Link
               href={teacherHref}
-              className="bg-blue-600 hover:bg-blue-700 text-white px-5 py-2.5 rounded-xl font-bold shadow-lg shadow-blue-500/30 flex items-center gap-2 transform transition hover:scale-105"
+              className="bg-blue-600 hover:bg-blue-700 text-white px-5 py-2.5 rounded-xl font-bold shadow-lg shadow-blue-500/30 flex items-center justify-center gap-2 transform transition hover:scale-105 shrink-0 w-full sm:w-auto text-sm sm:text-base"
             >
               <RefreshCw size={18} /> Xem câu hỏi
             </Link>

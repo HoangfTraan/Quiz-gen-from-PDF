@@ -23,15 +23,15 @@ export default async function TeacherResultsPage(props: {
   if (!hasAccess) {
     return (
       <div className="animate-page-fade">
-        <h1 className="text-2xl font-extrabold text-gray-800 flex items-center gap-3 mb-8">
+        <h1 className="text-xl sm:text-2xl font-extrabold text-gray-800 flex items-center gap-3 mb-8">
           <BarChart className="text-purple-600" /> Kết quả thi của Học viên
         </h1>
-        <div className="flex flex-col items-center justify-center py-24 bg-white rounded-2xl border border-red-200 text-center px-6 shadow-sm">
+        <div className="flex flex-col items-center justify-center py-16 sm:py-24 bg-white rounded-2xl border border-red-200 text-center px-6 shadow-sm">
           <ShieldAlert size={52} className="text-red-400 mb-4" />
-          <h2 className="text-xl font-extrabold text-gray-800 mb-2">
+          <h2 className="text-lg sm:text-xl font-extrabold text-gray-800 mb-2">
             Tính năng dành riêng cho Giáo viên
           </h2>
-          <p className="text-gray-500 max-w-md">
+          <p className="text-gray-500 max-w-md text-sm sm:text-base">
             Chỉ tài khoản được cấp quyền <strong>Giáo viên</strong> mới có thể
             xem thống kê điểm thi của các bộ đề đã xuất bản.
           </p>
@@ -81,19 +81,20 @@ export default async function TeacherResultsPage(props: {
 
   return (
     <div className="animate-page-fade">
-      <div className="flex justify-between items-center mb-6">
+      <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2 mb-6">
         <div>
-          <h1 className="text-2xl font-extrabold text-gray-800 flex items-center gap-3">
-            <BarChart className="text-purple-600" /> Kết quả thi của Học viên
+          <h1 className="text-xl sm:text-2xl font-extrabold text-gray-800 flex items-center gap-3">
+            <BarChart className="text-purple-600" /> Kết quả thi
           </h1>
-          <p className="text-gray-500 mt-2 text-sm">
+          <p className="text-gray-500 mt-1 sm:mt-2 text-xs sm:text-sm">
             Danh sách điểm số các lượt làm bài từ bộ đề mà bạn đã xuất bản.
           </p>
         </div>
       </div>
 
       <div className="bg-white rounded-2xl shadow-xl shadow-gray-200/50 border border-gray-100 overflow-hidden transition-all hover:shadow-2xl">
-        <div className="min-w-full divide-y divide-gray-200 overflow-x-auto">
+        {/* DESKTOP TABLE */}
+        <div className="hidden md:block min-w-full divide-y divide-gray-200 overflow-x-auto">
           <table className="min-w-full divide-y divide-gray-200">
             <thead className="bg-gray-50/80">
               <tr>
@@ -210,8 +211,81 @@ export default async function TeacherResultsPage(props: {
           </table>
         </div>
 
+        {/* MOBILE CARD LIST */}
+        <div className="md:hidden divide-y divide-gray-100">
+          {history.length === 0 ? (
+            <div className="px-4 py-12 text-center text-gray-500 font-medium">
+              <div className="flex flex-col items-center justify-center gap-3">
+                <div className="w-14 h-14 bg-gray-50 rounded-full flex items-center justify-center text-gray-400">
+                  <BarChart size={28} />
+                </div>
+                <p>Chưa có học viên nào làm bài bộ đề của bạn.</p>
+                <Link
+                  href="/quizzes"
+                  className="text-purple-600 hover:text-purple-700 hover:underline font-bold transition-all"
+                >
+                  Quản lý Bộ câu hỏi
+                </Link>
+              </div>
+            </div>
+          ) : (
+            history.map((record) => {
+              const ratio =
+                record.total_questions > 0
+                  ? record.total_correct / record.total_questions
+                  : 0;
+
+              const learnerName = record.users?.full_name || record.users?.email || "Học viên ẩn danh";
+
+              return (
+                <div key={record.id} className="p-4 animate-page-fade">
+                  <div className="flex items-start gap-3">
+                    <div className="w-9 h-9 rounded-full bg-purple-100 text-purple-700 font-black text-sm flex items-center justify-center shrink-0 border border-purple-200">
+                      {learnerName.charAt(0).toUpperCase()}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="font-bold text-gray-900 text-sm truncate">{learnerName}</p>
+                      <p className="text-xs text-gray-500 truncate mt-0.5">
+                        {record.quizzes?.title || "Bộ đề không xác định"}
+                      </p>
+                      <div className="flex items-center gap-2 mt-2 flex-wrap">
+                        <span className="flex items-center gap-1 text-xs text-gray-400">
+                          <Clock size={11} />
+                          {new Date(
+                            record.submitted_at || record.started_at || Date.now()
+                          ).toLocaleString("vi-VN", {
+                            hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit'
+                          })}
+                        </span>
+                        <span
+                          className={`px-2 py-0.5 text-xs font-black rounded-full border items-center gap-1 flex ${
+                            ratio >= 0.8
+                              ? "bg-green-50 border-green-200 text-green-700"
+                              : ratio >= 0.5
+                              ? "bg-orange-50 border-orange-200 text-orange-700"
+                              : "bg-red-50 border-red-200 text-red-700"
+                          }`}
+                        >
+                          <Award size={11} />
+                          {record.total_correct}/{record.total_questions}
+                        </span>
+                      </div>
+                    </div>
+                    <Link
+                      href={`/attempts/${record.id}/result`}
+                      className="shrink-0 p-2 text-purple-600 bg-purple-50 border border-purple-200 rounded-lg hover:bg-purple-100 transition-all"
+                    >
+                      <Eye size={16} />
+                    </Link>
+                  </div>
+                </div>
+              );
+            })
+          )}
+        </div>
+
         {totalItems > 0 && (
-          <div className="px-6 py-4 border-t border-gray-100 bg-gray-50/50">
+          <div className="px-4 sm:px-6 py-4 border-t border-gray-100 bg-gray-50/50">
             <Pagination
               currentPage={page}
               totalPages={totalPages}

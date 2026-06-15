@@ -209,10 +209,10 @@ export default function DocumentUploadPage() {
         document.body
       )}
     
-      {!accessDenied && <div className="animate-slide-in-right max-w-2xl mx-auto mt-10 relative">
-        <h1 className="text-2xl font-extrabold text-gray-800 mb-6 text-center">Tải lên tài liệu mới</h1>
+      {!accessDenied && <div className="animate-slide-in-right max-w-2xl mx-auto mt-4 sm:mt-10 relative">
+        <h1 className="text-xl sm:text-2xl font-extrabold text-gray-800 mb-4 sm:mb-6 text-center">Tải lên tài liệu mới</h1>
 
-      <div className="bg-white p-8 rounded-xl shadow-lg border border-gray-100">
+      <div className="bg-white p-4 sm:p-8 rounded-xl shadow-lg border border-gray-100">
         {errorText && (
           <div className={`mb-4 p-3 bg-red-50 text-red-700 border border-red-200 rounded-lg flex items-center gap-2 text-sm ${
             isErrorExiting ? "animate-slide-up-out" : "animate-drop-in"
@@ -302,7 +302,7 @@ export default function DocumentUploadPage() {
 
         <div className="mb-6">
           <label className="block text-sm font-medium text-gray-700 mb-2">Loại câu hỏi muốn tạo</label>
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
             {([
               { key: 'mcq', label: 'Trắc nghiệm A/B/C/D', icon: '📝' },
               { key: 'true_false', label: 'Đúng/Sai', icon: '✅' },
@@ -323,14 +323,14 @@ export default function DocumentUploadPage() {
                         : [...prev, type.key]
                     );
                   }}
-                  className={`py-2.5 px-3 rounded-lg font-bold text-xs border-2 transition-all flex items-center gap-1.5 ${
+                  className={`py-2.5 px-4 rounded-lg font-semibold text-sm border-2 transition-all flex items-center justify-center gap-2 whitespace-nowrap ${
                     isSelected
-                      ? 'bg-emerald-600 text-white border-emerald-600 shadow-lg shadow-emerald-500/30 scale-105'
+                      ? 'bg-emerald-600 text-white border-emerald-600 shadow-lg shadow-emerald-500/30 scale-[1.03]'
                       : 'bg-white text-gray-600 border-gray-200 hover:border-emerald-300 hover:text-emerald-600'
                   }`}
                 >
-                  <span>{type.icon}</span>
-                  {type.label}
+                  <span className="text-base flex-shrink-0">{type.icon}</span>
+                  <span className="truncate">{type.label}</span>
                 </button>
               );
             })}
@@ -338,7 +338,7 @@ export default function DocumentUploadPage() {
           <p className="text-xs text-gray-400 mt-2">
             {questionTypes.length === 0
               ? "Chưa chọn → Mặc định tạo trắc nghiệm A/B/C/D."
-              : `Đã chọn ${questionTypes.length} loại: ${questionTypes.join(', ')}`
+              : `Đã chọn ${questionTypes.length} loại: ${questionTypes.map(t => ({ mcq: 'Trắc nghiệm A/B/C/D', true_false: 'Đúng/Sai', fill_blank: 'Điền vào chỗ trống', short_answer: 'Trả lời ngắn', multi_select: 'Chọn nhiều đáp án', matching: 'Ghép đôi' }[t] || t)).join(', ')}`
             }
           </p>
         </div>

@@ -14,7 +14,8 @@ import {
   LayoutDashboard,
   LogOut,
   User as UserIcon,
-  UserPlus
+  UserPlus,
+  AlertTriangle
 } from "lucide-react";
 import { createClient } from "@/utils/supabase/client";
 
@@ -109,6 +110,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     { name: "Yêu cầu quyền", href: "/admin/role-requests", icon: UserPlus },
     { name: "Tài liệu", href: "/admin/documents", icon: Files },
     { name: "Câu hỏi", href: "/admin/questions", icon: HelpCircle },
+    { name: "Câu hỏi bị lỗi", href: "/admin/flagged-questions", icon: AlertTriangle },
     { name: "Hồ sơ", href: "/admin/profile", icon: UserIcon },
     // { name: "Tiến trình AI", href: "/admin/ai-jobs", icon: Activity },
   ];

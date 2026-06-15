@@ -17,6 +17,7 @@ import {
   GraduationCap,
   BookMarked,
   BarChart,
+  X,
 } from "lucide-react";
 import { createClient } from "@/utils/supabase/client";
 import type { AppRole } from "@/utils/rbac";
@@ -28,6 +29,7 @@ function DashboardLayoutContent({
   children: React.ReactNode;
 }) {
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [userName, setUserName] = useState("Người dùng");
   const [userInitial, setUserInitial] = useState("U");
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
@@ -136,6 +138,11 @@ function DashboardLayoutContent({
     };
   }, [supabase]);
 
+  // Close mobile menu on route change
+  useEffect(() => {
+    setIsMobileMenuOpen(false);
+  }, [pathname]);
+
   const handleLogout = async () => {
     await supabase.auth.signOut();
     window.location.href = "/login";
@@ -144,21 +151,24 @@ function DashboardLayoutContent({
   // Menu điều hướng — ẩn "Lịch sử thi" nếu không phải learner
   const navigation = [
     { name: "Tổng quan", href: "/dashboard", icon: LayoutDashboard, roles: ["admin", "teacher", "learner", "user"] },
-    { name: "Tài liệu của tôi", href: "/documents", icon: Files, roles: ["teacher", "learner", "user"] },
-    { name: "Bộ câu hỏi", href: "/quizzes", icon: BookOpen, roles: ["teacher", "learner"] },
+    { name: "Tài liệu", href: "/documents", icon: Files, roles: ["teacher", "learner", "user"] },
+    { name: "Bộ câu hỏi", href: "/quizzes", icon: BookOpen, roles: ["teacher", "learner", "user"] },
     { name: "Lịch sử thi", href: "/history", icon: History, roles: ["learner"] },
     { name: "Kết quả thi", href: "/teacher-results", icon: BarChart, roles: ["teacher", "admin"] },
     { name: "Hồ sơ", href: "/profile", icon: UserIcon, roles: ["admin", "teacher", "learner", "user"] },
   ].filter((item) => item.roles.includes(userRole));
+
+  // Bottom nav items (max 5 for mobile)
+  const bottomNavItems = navigation.slice(0, 5);
 
   // Thông báo lỗi khi bị chặn route
   const routeError = searchParams.get("error");
 
   return (
     <div className="flex h-screen overflow-hidden bg-gray-50 font-sans text-gray-800">
-      {/* SIDEBAR */}
+      {/* DESKTOP SIDEBAR — hidden on mobile */}
       <aside
-        className={`bg-white border-r border-gray-200 flex flex-col h-full shadow-sm z-10 hidden md:flex shrink-0 transition-all duration-500 ease-in-out relative overflow-hidden ${
+        className={`bg-white border-r border-gray-200 flex-col h-full shadow-sm z-10 hidden md:flex shrink-0 transition-all duration-500 ease-in-out relative overflow-hidden ${
           isSidebarOpen ? "w-64 opacity-100" : "w-0 opacity-0 border-r-0"
         }`}
       >
@@ -263,7 +273,7 @@ function DashboardLayoutContent({
         </div>
       </aside>
 
-      {/* Nút Hamburger */}
+      {/* Desktop Hamburger Button (when sidebar closed) */}
       {!isSidebarOpen && (
         <button
           onClick={() => setIsSidebarOpen(true)}
@@ -273,9 +283,155 @@ function DashboardLayoutContent({
         </button>
       )}
 
+      {/* MOBILE HEADER — visible only on mobile */}
+      <div className="md:hidden fixed top-0 left-0 right-0 z-40 bg-white/95 backdrop-blur-md border-b border-gray-200 shadow-sm">
+        <div className="flex items-center justify-between px-4 h-14">
+          <Link href="/" className="text-lg font-extrabold text-blue-700">
+            QuizGen
+          </Link>
+          <div className="flex items-center gap-2">
+            {userRole !== "admin" && (
+              <Link
+                href="/documents/upload"
+                className="p-2 bg-blue-600 text-white rounded-lg shadow-sm"
+              >
+                <PlusCircle size={18} />
+              </Link>
+            )}
+            <button
+              onClick={() => setIsMobileMenuOpen(true)}
+              className="p-2 text-gray-600 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+            >
+              <Menu size={22} />
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* MOBILE SLIDE-OUT DRAWER */}
+      {isMobileMenuOpen && (
+        <>
+          {/* Backdrop */}
+          <div
+            className="md:hidden fixed inset-0 z-50 bg-black/40 backdrop-blur-sm animate-fade-in"
+            onClick={() => setIsMobileMenuOpen(false)}
+          />
+          {/* Drawer */}
+          <div className="md:hidden fixed top-0 right-0 bottom-0 z-50 w-72 bg-white shadow-2xl animate-slide-in-right flex flex-col">
+            <div className="flex items-center justify-between p-4 border-b border-gray-100">
+              <span className="font-extrabold text-gray-800">Menu</span>
+              <button
+                onClick={() => setIsMobileMenuOpen(false)}
+                className="p-2 text-gray-500 hover:text-gray-800 hover:bg-gray-100 rounded-lg transition-colors"
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            {/* User info */}
+            <div className="p-4 border-b border-gray-100">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center text-blue-600 font-bold shrink-0 overflow-hidden border border-gray-100">
+                  {avatarUrl ? (
+                    <img src={avatarUrl} alt="Avatar" className="w-full h-full object-cover" />
+                  ) : (
+                    userInitial
+                  )}
+                </div>
+                <div className="overflow-hidden flex-1">
+                  <p className="font-semibold text-sm truncate">{userName}</p>
+                  <span
+                    className={`inline-flex items-center gap-1 text-xs font-semibold px-2 py-0.5 rounded-full border mt-0.5 ${getRoleBadgeClass(userRole)}`}
+                  >
+                    {userRole === "teacher" && <BookMarked size={10} />}
+                    {userRole === "learner" && <GraduationCap size={10} />}
+                    {getRoleLabel(userRole)}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* Nav items */}
+            <nav className="flex-1 overflow-y-auto p-3 space-y-1">
+              {navigation.map((item) => {
+                const isActive =
+                  pathname === item.href ||
+                  pathname?.startsWith(item.href + "/");
+                return (
+                  <Link
+                    key={item.name}
+                    href={item.href}
+                    className={`flex items-center gap-3 px-3 py-3 rounded-xl font-medium transition-colors ${
+                      isActive
+                        ? "bg-blue-50 text-blue-700"
+                        : "text-gray-600 hover:bg-gray-50 hover:text-gray-900"
+                    }`}
+                  >
+                    <item.icon
+                      size={20}
+                      className={isActive ? "text-blue-600" : "text-gray-400"}
+                    />
+                    {item.name}
+                  </Link>
+                );
+              })}
+
+              {userRole === "admin" && (
+                <Link
+                  href="/admin"
+                  className="flex items-center gap-3 px-3 py-3 rounded-xl font-bold text-purple-700 bg-purple-50 hover:bg-purple-100 transition-colors"
+                >
+                  <ShieldCheck size={20} className="text-purple-600" />
+                  Vào trang Quản trị
+                </Link>
+              )}
+            </nav>
+
+            {/* Logout */}
+            <div className="p-4 border-t border-gray-100">
+              <button
+                onClick={handleLogout}
+                className="w-full flex items-center justify-center gap-2 px-4 py-2.5 text-red-600 bg-red-50 hover:bg-red-100 rounded-xl font-bold text-sm transition-colors"
+              >
+                <LogOut size={16} /> Đăng xuất
+              </button>
+            </div>
+          </div>
+        </>
+      )}
+
+      {/* MOBILE BOTTOM NAVIGATION BAR */}
+      <div className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-white/95 backdrop-blur-md border-t border-gray-200 shadow-[0_-2px_10px_rgba(0,0,0,0.05)]">
+        <div className="flex items-center justify-around h-16 px-1">
+          {bottomNavItems.map((item) => {
+            const isActive =
+              pathname === item.href ||
+              pathname?.startsWith(item.href + "/");
+            return (
+              <Link
+                key={item.name}
+                href={item.href}
+                className={`flex flex-col items-center justify-center gap-0.5 flex-1 py-1 rounded-lg transition-colors ${
+                  isActive
+                    ? "text-blue-600"
+                    : "text-gray-400 hover:text-gray-600"
+                }`}
+              >
+                <item.icon size={20} strokeWidth={isActive ? 2.5 : 2} />
+                <span className={`text-[10px] font-semibold leading-tight ${isActive ? "font-bold" : ""}`}>
+                  {item.name}
+                </span>
+              </Link>
+            );
+          })}
+        </div>
+        {/* Safe area for phones with home bar */}
+        <div className="h-[env(safe-area-inset-bottom)]" />
+      </div>
+
       {/* MAIN CONTENT AREA */}
-      <main className="flex-1 p-6 relative overflow-y-auto h-full">
-        <div className="max-w-6xl mx-auto">
+      <main className="flex-1 relative overflow-y-auto h-full pt-14 md:pt-0 pb-20 md:pb-0">
+        <div className="max-w-6xl mx-auto p-4 md:p-6">
           {/* Banner thông báo nếu bị chặn route */}
           {routeError === "learner_only" && (
             <div className="mb-4 p-4 bg-amber-50 border border-amber-200 rounded-xl text-amber-800 text-sm font-medium flex items-center gap-2">

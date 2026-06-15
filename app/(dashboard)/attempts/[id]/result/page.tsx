@@ -4,6 +4,7 @@ import { createClient } from "@/utils/supabase/server";
 import { createAdminClient } from "@/utils/supabase/admin";
 import { notFound, redirect } from "next/navigation";
 import AiRecommendationCard from "./AiRecommendationCard";
+import ReportButton from "./ReportButton";
 import { getUserRole } from "@/utils/rbac-server";
 
 export default async function ResultPage({ params }: { params: Promise<{ id: string }> }) {
@@ -244,6 +245,12 @@ export default async function ResultPage({ params }: { params: Promise<{ id: str
                 <strong className="text-gray-800 mr-2 flex items-center gap-1 mb-1"><FileText size={14} className="text-blue-500" /> Giải thích chi tiết:</strong>
                 {parseExplanation(ans.questions?.explanation, ans.questions?.difficulty).text || 'Không có giải thích cho câu hỏi này.'}
               </div>
+
+              {!isTeacherViewing && (
+                <div className="flex justify-end mt-4">
+                  <ReportButton questionId={ans.questions?.id} />
+                </div>
+              )}
             </div>
           );
         })}

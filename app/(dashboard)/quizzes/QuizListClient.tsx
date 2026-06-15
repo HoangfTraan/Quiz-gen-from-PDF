@@ -2,10 +2,11 @@
 
 import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
-import { BookOpen, Play, Eye, Edit3, Loader2, CheckCircle2 } from "lucide-react";
+import { BookOpen, Play, Eye, Edit3, Loader2, CheckCircle2, Trash2 } from "lucide-react";
 import { createClient } from "@/utils/supabase/client";
 import type { AppRole } from "@/utils/rbac";
 import { canAuthorQuiz, canTakePublishedQuiz } from "@/utils/rbac";
+import ConfirmModal from "@/components/ConfirmModal";
 
 interface QuizListClientProps {
   role: AppRole;
@@ -18,6 +19,8 @@ export default function QuizListClient({ role, userId, teacherIds = [] }: QuizLi
   const [attempts, setAttempts] = useState<Record<string, string>>({}); // quiz_id -> attempt_id
   const [loading, setLoading] = useState(true);
   const [currentPage, setCurrentPage] = useState(1);
+  const [quizToDelete, setQuizToDelete] = useState<{id: string, title: string} | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
   const pageSize = 9;
   const supabase = createClient();
 
@@ -41,6 +44,9 @@ export default function QuizListClient({ role, userId, teacherIds = [] }: QuizLi
         // Không có giáo viên nào -> chỉ hiện bộ đề của mình
         query = query.eq("user_id", userId);
       }
+    } else {
+      // Default user: chỉ được xem bộ đề của chính mình tạo ra
+      query = query.eq("user_id", userId);
     }
 
     const { data } = await query;
@@ -88,6 +94,22 @@ export default function QuizListClient({ role, userId, teacherIds = [] }: QuizLi
     };
   }, [fetchQuizzes, supabase, userId]);
 
+  const executeDeleteQuiz = async () => {
+    if (!quizToDelete) return;
+    setIsDeleting(true);
+    try {
+      const { error } = await supabase.from("quizzes").delete().eq("id", quizToDelete.id);
+      if (error) throw error;
+      setQuizzes(quizzes.filter(q => q.id !== quizToDelete.id));
+    } catch (err: any) {
+      console.error("Lỗi khi xoá bộ đề:", err.message);
+      alert("Đã xảy ra lỗi khi xoá bộ đề. Vui lòng thử lại.");
+    } finally {
+      setIsDeleting(false);
+      setQuizToDelete(null);
+    }
+  };
+
   // Pagination
   const totalItems = quizzes.length;
   const totalPages = Math.ceil(totalItems / pageSize);
@@ -107,8 +129,8 @@ export default function QuizListClient({ role, userId, teacherIds = [] }: QuizLi
   return (
     <div>
       <div className="flex justify-between items-center mb-6">
-        <h1 className="text-2xl font-extrabold text-gray-800">
-          {isLearner ? "Bộ đề thi" : "Danh sách Bộ Câu hỏi"}
+        <h1 className="text-xl sm:text-2xl font-extrabold text-gray-800">
+          {isLearner ? "Bộ đề thi" : "Bộ Câu hỏi"}
         </h1>
       </div>
 
@@ -131,43 +153,59 @@ export default function QuizListClient({ role, userId, teacherIds = [] }: QuizLi
                   <BookOpen size={20} />
                 </div>
 
-                {/* Badge trạng thái: chỉ hiện cho teacher */}
-                {isAuthor && (
-                  <span
-                    className={`px-2 py-1 text-xs font-semibold rounded-full ${
-                      quiz.status === "published"
-                        ? "bg-green-100 text-green-800"
-                        : "bg-gray-100 text-gray-800"
-                    }`}
-                  >
-                    {quiz.status === "published" ? "Đã xuất bản" : "Bản nháp"}
-                  </span>
-                )}
+                <div className="flex items-center gap-2">
+                  {/* Badge trạng thái: chỉ hiện cho teacher */}
+                  {isAuthor && (
+                    <span
+                      className={`px-2 py-1 text-xs font-semibold rounded-full ${
+                        quiz.status === "published"
+                          ? "bg-green-100 text-green-800"
+                          : "bg-gray-100 text-gray-800"
+                      }`}
+                    >
+                      {quiz.status === "published" ? "Đã xuất bản" : "Bản nháp"}
+                    </span>
+                  )}
 
-                {isLearner && (() => {
-                  const isOwnQuiz = quiz.user_id === userId;
-                  const isCompleted = !isOwnQuiz && !!attempts[quiz.id];
-                  
-                  return (
-                    <div className="flex items-center gap-2">
-                      {!isOwnQuiz && isCompleted && (
-                        <span className="px-2 py-1 text-xs font-bold rounded-full bg-green-100 text-green-700 border border-green-200 flex items-center gap-1">
-                          <CheckCircle2 size={10} /> Đã làm
+                  {isLearner && (() => {
+                    const isOwnQuiz = quiz.user_id === userId;
+                    const isCompleted = !isOwnQuiz && !!attempts[quiz.id];
+                    
+                    return (
+                      <div className="flex items-center gap-2">
+                        {!isOwnQuiz && isCompleted && (
+                          <span className="px-2 py-1 text-xs font-bold rounded-full bg-green-100 text-green-700 border border-green-200 flex items-center gap-1">
+                            <CheckCircle2 size={10} /> Đã làm
+                          </span>
+                        )}
+                        <span
+                          className={`px-2.5 py-1.5 text-xs font-semibold rounded-xl text-right break-words leading-relaxed ${
+                            isOwnQuiz
+                              ? "bg-purple-100 text-purple-800"
+                              : "bg-indigo-100 text-indigo-800"
+                          }`}
+                          title={!isOwnQuiz ? `Từ giáo viên: ${quiz.users?.full_name || 'Hệ thống'}` : 'Bộ đề do bạn tạo'}
+                        >
+                          {isOwnQuiz ? "Của tôi" : `Từ: ${quiz.users?.full_name || 'Giáo viên'}`}
                         </span>
-                      )}
-                      <span
-                        className={`px-2.5 py-1.5 text-xs font-semibold rounded-xl text-right break-words leading-relaxed ${
-                          isOwnQuiz
-                            ? "bg-purple-100 text-purple-800"
-                            : "bg-indigo-100 text-indigo-800"
-                        }`}
-                        title={!isOwnQuiz ? `Từ giáo viên: ${quiz.users?.full_name || 'Hệ thống'}` : 'Bộ đề do bạn tạo'}
-                      >
-                        {isOwnQuiz ? "Của tôi" : `Từ: ${quiz.users?.full_name || 'Giáo viên'}`}
-                      </span>
-                    </div>
-                  );
-                })()}
+                      </div>
+                    );
+                  })()}
+
+                  {quiz.user_id === userId && (
+                    <button
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        setQuizToDelete({ id: quiz.id, title: quiz.title });
+                      }}
+                      className="p-1.5 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors ml-1"
+                      title="Xóa bộ đề"
+                    >
+                      <Trash2 size={16} />
+                    </button>
+                  )}
+                </div>
               </div>
 
               <h3 className="font-bold text-lg text-gray-800 mb-1 line-clamp-2 min-h-[56px]">
@@ -230,6 +268,16 @@ export default function QuizListClient({ role, userId, teacherIds = [] }: QuizLi
                     )}
                   </Link>
                 )}
+
+                {/* Default User: Chỉ "Xem chi tiết" bộ đề của mình */}
+                {!isLearner && !isAuthor && (
+                  <Link
+                    href={`/quizzes/${quiz.id}`}
+                    className="flex-1 text-center bg-blue-50 hover:bg-blue-100 text-blue-700 py-2 rounded-lg text-sm font-bold transition-colors flex items-center justify-center gap-1.5"
+                  >
+                    <Eye size={15} /> Xem chi tiết
+                  </Link>
+                )}
               </div>
             </div>
           ))
@@ -238,8 +286,8 @@ export default function QuizListClient({ role, userId, teacherIds = [] }: QuizLi
 
       {/* Pagination */}
       {totalPages > 1 && (
-        <div className="flex items-center justify-between mt-12 py-6 border-t border-gray-100">
-          <p className="text-sm text-gray-500 font-medium tracking-tight">
+        <div className="flex flex-col sm:flex-row items-center justify-between gap-3 mt-8 sm:mt-12 py-4 sm:py-6 border-t border-gray-100">
+          <p className="text-xs sm:text-sm text-gray-500 font-medium tracking-tight">
             Hiển thị <span className="font-black text-gray-900">{(currentPage - 1) * pageSize + 1}</span> -{" "}
             <span className="font-black text-gray-900">{Math.min(currentPage * pageSize, totalItems)}</span> trong số{" "}
             <span className="font-black text-gray-900">{totalItems}</span> bộ đề
@@ -264,6 +312,19 @@ export default function QuizListClient({ role, userId, teacherIds = [] }: QuizLi
             </button>
           </div>
         </div>
+      )}
+
+      {quizToDelete && (
+        <ConfirmModal
+          isOpen={!!quizToDelete}
+          title="Xác nhận xóa"
+          message={`Bạn có chắc chắn muốn xóa bộ đề "${quizToDelete.title}"? Thao tác này không thể hoàn tác.`}
+          confirmText="Xóa bộ đề"
+          cancelText="Hủy"
+          onConfirm={executeDeleteQuiz}
+          onClose={() => setQuizToDelete(null)}
+          isDestructive={true}
+        />
       )}
     </div>
   );

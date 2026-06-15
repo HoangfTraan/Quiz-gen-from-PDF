@@ -88,17 +88,26 @@ export default function DocumentsPage() {
   const totalPages = Math.ceil(filteredDocs.length / itemsPerPage);
   const paginatedDocs = filteredDocs.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
 
+  const getStatusBadge = (status: string) => {
+    const map: Record<string, { label: string; className: string }> = {
+      completed: { label: 'Hoàn thành', className: 'bg-green-100 text-green-800' },
+      failed: { label: 'Thất bại', className: 'bg-red-100 text-red-800' },
+      analyzed: { label: 'Đã phân tích', className: 'bg-blue-100 text-blue-800' },
+    };
+    return map[status] || { label: 'Đang xử lý', className: 'bg-yellow-100 text-yellow-800 animate-pulse' };
+  };
+
   return (
     <>
       <div>
-        <div className="flex justify-between items-center mb-6">
-          <h1 className="text-2xl font-extrabold text-gray-800">Quản lý Tài liệu</h1>
+        <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3 mb-6">
+          <h1 className="text-xl sm:text-2xl font-extrabold text-gray-800">Quản lý Tài liệu</h1>
           <div className="flex gap-3">
             <div className={`overflow-hidden transition-all duration-300 origin-right flex items-center ${selectedIds.size > 0 ? "max-w-[200px] opacity-100 scale-100" : "max-w-0 opacity-0 scale-50 pointer-events-none"}`}>
               <button
                 onClick={() => openDeleteModal(Array.from(selectedIds))}
                 disabled={deleting || selectedIds.size === 0}
-                className="bg-red-50 hover:bg-red-100 text-red-600 border border-red-200 px-4 py-2 rounded-lg font-medium flex items-center gap-2 whitespace-nowrap"
+                className="bg-red-50 hover:bg-red-100 text-red-600 border border-red-200 px-4 py-2 rounded-lg font-medium flex items-center gap-2 whitespace-nowrap text-sm"
               >
                 {deleting ? <Loader2 size={18} className="animate-spin" /> : <Trash2 size={18} />}
                 Xóa ({selectedIds.size})
@@ -106,16 +115,17 @@ export default function DocumentsPage() {
             </div>
             <Link
               href="/documents/upload"
-              className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-medium flex items-center gap-2"
+              className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-medium flex items-center gap-2 text-sm"
             >
               <PlusCircle size={18} />
-              Tải tài liệu lên
+              <span className="hidden sm:inline">Tải tài liệu lên</span>
+              <span className="sm:hidden">Tải lên</span>
             </Link>
           </div>
         </div>
 
         <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-          <div className="p-4 border-b border-gray-100 flex gap-4">
+          <div className="p-3 sm:p-4 border-b border-gray-100 flex gap-4">
             <div className="relative flex-1">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
               <input
@@ -127,7 +137,7 @@ export default function DocumentsPage() {
                   setCurrentPage(1);
                 }}
                 autoFocus={true}
-                className="w-full pl-10 pr-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 font-medium"
+                className="w-full pl-10 pr-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 font-medium text-sm"
               />
             </div>
           </div>
@@ -136,7 +146,8 @@ export default function DocumentsPage() {
             <div className="flex justify-center items-center py-20 text-gray-400"><Loader2 className="animate-spin" size={32} /></div>
           ) : (
             <>
-              <div className="min-w-full divide-y divide-gray-200 overflow-x-auto">
+              {/* DESKTOP TABLE — hidden on mobile */}
+              <div className="hidden md:block min-w-full divide-y divide-gray-200 overflow-x-auto">
                 <table className="min-w-full divide-y divide-gray-200">
                   <thead className="bg-gray-50">
                     <tr>
@@ -157,44 +168,95 @@ export default function DocumentsPage() {
                           Không tìm thấy tài liệu phù hợp. <Link href="/documents/upload" className="text-blue-600 hover:underline">Tải lên ngay</Link>
                         </td>
                       </tr>
-                    ) : paginatedDocs.map((doc) => (
-                      <tr key={doc.id} className="hover:bg-gray-50 transition-colors">
-                        <td className="px-5 py-4 whitespace-nowrap text-center">
-                          <input type="checkbox" checked={selectedIds.has(doc.id)} onChange={() => toggleSelect(doc.id)} className="w-4 h-4 text-blue-600 rounded cursor-pointer" />
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <Link href={doc.status === 'processing' || doc.status === 'uploaded' || doc.status === 'analyzed' ? `/documents/${doc.id}/analysis` : `/documents/${doc.id}`} className="flex items-center gap-2 font-bold text-gray-800 hover:text-blue-600 transition-colors">
-                            <FileText size={18} className="text-blue-500" />
-                            {doc.title}
-                          </Link>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 font-medium">
-                          {doc.subjects?.name || "Không có chủ đề"}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <span className={`px-2.5 py-1 inline-flex text-xs leading-5 font-black rounded-lg uppercase tracking-wider ${doc.status === 'completed' ? 'bg-green-100 text-green-800' :
-                              doc.status === 'failed' ? 'bg-red-100 text-red-800' :
-                              doc.status === 'analyzed' ? 'bg-blue-100 text-blue-800' : 'bg-yellow-100 text-yellow-800 animate-pulse'
-                            }`}>
-                            {doc.status === 'completed' ? 'Hoàn thành' : doc.status === 'failed' ? 'Thất bại' : doc.status === 'analyzed' ? 'Đã phân tích' : 'Đang xử lý'}
-                          </span>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 font-medium">
-                          {new Date(doc.created_at).toLocaleDateString("vi-VN")}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                          <button onClick={() => openDeleteModal([doc.id])} className="text-gray-400 hover:text-red-500 p-2 transition-colors rounded-lg hover:bg-red-50">
-                            <Trash2 size={16} />
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
+                    ) : paginatedDocs.map((doc) => {
+                      const badge = getStatusBadge(doc.status);
+                      return (
+                        <tr key={doc.id} className="hover:bg-gray-50 transition-colors">
+                          <td className="px-5 py-4 whitespace-nowrap text-center">
+                            <input type="checkbox" checked={selectedIds.has(doc.id)} onChange={() => toggleSelect(doc.id)} className="w-4 h-4 text-blue-600 rounded cursor-pointer" />
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <Link href={doc.status === 'processing' || doc.status === 'uploaded' || doc.status === 'analyzed' ? `/documents/${doc.id}/analysis` : `/documents/${doc.id}`} className="flex items-center gap-2 font-bold text-gray-800 hover:text-blue-600 transition-colors">
+                              <FileText size={18} className="text-blue-500" />
+                              {doc.title}
+                            </Link>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 font-medium">
+                            {doc.subjects?.name || "Không có chủ đề"}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <span className={`px-2.5 py-1 inline-flex text-xs leading-5 font-black rounded-lg uppercase tracking-wider ${badge.className}`}>
+                              {badge.label}
+                            </span>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 font-medium">
+                            {new Date(doc.created_at).toLocaleDateString("vi-VN")}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                            <button onClick={() => openDeleteModal([doc.id])} className="text-gray-400 hover:text-red-500 p-2 transition-colors rounded-lg hover:bg-red-50">
+                              <Trash2 size={16} />
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>
+
+              {/* MOBILE CARD LIST — visible only on mobile */}
+              <div className="md:hidden divide-y divide-gray-100">
+                {filteredDocs.length === 0 ? (
+                  <div className="px-4 py-12 text-center text-gray-500 font-medium">
+                    Không tìm thấy tài liệu phù hợp. <Link href="/documents/upload" className="text-blue-600 hover:underline">Tải lên ngay</Link>
+                  </div>
+                ) : paginatedDocs.map((doc) => {
+                  const badge = getStatusBadge(doc.status);
+                  return (
+                    <div key={doc.id} className="p-4 animate-page-fade">
+                      <div className="flex items-start gap-3">
+                        <input
+                          type="checkbox"
+                          checked={selectedIds.has(doc.id)}
+                          onChange={() => toggleSelect(doc.id)}
+                          className="w-4 h-4 text-blue-600 rounded cursor-pointer mt-1 shrink-0"
+                        />
+                        <div className="flex-1 min-w-0">
+                          <Link
+                            href={doc.status === 'processing' || doc.status === 'uploaded' || doc.status === 'analyzed' ? `/documents/${doc.id}/analysis` : `/documents/${doc.id}`}
+                            className="flex items-center gap-2 font-bold text-gray-800 hover:text-blue-600 transition-colors"
+                          >
+                            <FileText size={16} className="text-blue-500 shrink-0" />
+                            <span className="truncate">{doc.title}</span>
+                          </Link>
+                          <div className="flex items-center gap-2 mt-1.5 flex-wrap">
+                            <span className={`px-2 py-0.5 text-[10px] font-black rounded-md uppercase tracking-wider ${badge.className}`}>
+                              {badge.label}
+                            </span>
+                            <span className="text-xs text-gray-400">
+                              {doc.subjects?.name || "Không phân loại"}
+                            </span>
+                            <span className="text-xs text-gray-400">
+                              • {new Date(doc.created_at).toLocaleDateString("vi-VN")}
+                            </span>
+                          </div>
+                        </div>
+                        <button
+                          onClick={() => openDeleteModal([doc.id])}
+                          className="text-gray-400 hover:text-red-500 p-1.5 transition-colors rounded-lg hover:bg-red-50 shrink-0"
+                        >
+                          <Trash2 size={16} />
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* Pagination */}
               {totalPages > 1 && (
-                <div className="flex items-center justify-between p-4 border-t border-gray-200 bg-gray-50/50">
-                  <span className="text-sm text-gray-500 font-medium">
+                <div className="flex flex-col sm:flex-row items-center justify-between gap-3 p-4 border-t border-gray-200 bg-gray-50/50">
+                  <span className="text-sm text-gray-500 font-medium text-center">
                     Hiển thị <span className="font-bold text-gray-800">{(currentPage - 1) * itemsPerPage + 1}</span> đến <span className="font-bold text-gray-800">{Math.min(currentPage * itemsPerPage, filteredDocs.length)}</span> trong số <span className="font-bold text-gray-800">{filteredDocs.length}</span> tài liệu
                   </span>
                   <div className="flex gap-2">

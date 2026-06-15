@@ -33,6 +33,7 @@ export default function ExamPage({ params }: { params: Promise<{ id: string }> }
   const [alreadyAttempted, setAlreadyAttempted] = useState<{attemptId: string} | null>(null);
   const [answers, setAnswers] = useState<Record<string, AnswerState>>({});
   const [filter, setFilter] = useState("all");
+  const [typeFilter, setTypeFilter] = useState("all");
 
   const parseExplanation = (text?: string) => {
     if (!text) return { diff: null, text: '' };
@@ -45,10 +46,16 @@ export default function ExamPage({ params }: { params: Promise<{ id: string }> }
 
   const filteredQuestions = questions.filter((q: any) => {
     const qDiff = parseExplanation(q.explanation).diff?.toLowerCase() || "none";
-    if (filter === "all") return true;
-    return qDiff === filter.toLowerCase();
+    const qType = q.question_type || "mcq";
+    
+    if (filter !== "all" && qDiff !== filter.toLowerCase()) return false;
+    if (typeFilter !== "all" && qType !== typeFilter) return false;
+    
+    return true;
   });
+  
   const uniqueDifficulties = Array.from(new Set(questions.map((q: any) => parseExplanation(q.explanation).diff).filter(Boolean)));
+  const uniqueTypes = Array.from(new Set(questions.map((q: any) => q.question_type || 'mcq')));
 
   // Đếm câu đã trả lời
   const answeredCount = filteredQuestions.filter(q => {
@@ -541,31 +548,57 @@ export default function ExamPage({ params }: { params: Promise<{ id: string }> }
       )}
 
       {questions.length > 0 && (
-        <div className="flex flex-wrap items-center gap-2 mb-8 bg-white p-4 rounded-xl shadow-sm border border-orange-100">
-          <span className="text-sm font-bold text-orange-600 mr-2 uppercase tracking-tight">Chế độ luyện tập:</span>
-          <button
-            onClick={() => setFilter("all")}
-            className={`px-4 py-2 rounded-lg text-xs font-black transition-all shadow-md uppercase tracking-wider ${filter === "all" ? "bg-orange-500 text-white scale-105" : "bg-white text-gray-600 border border-gray-200 hover:bg-gray-50 hover:border-gray-300"}`}
-          >
-            Toàn bộ đề thi
-          </button>
-          {uniqueDifficulties.map((diff: any) => (
+        <div className="bg-white p-4 md:p-6 rounded-2xl shadow-sm border border-orange-100 mb-8 space-y-4">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-sm font-bold text-orange-600 mr-2 uppercase tracking-tight shrink-0 md:w-32">Cấp độ Bloom:</span>
             <button
-              key={diff}
-              onClick={() => setFilter(diff.toLowerCase())}
-              className={`px-4 py-2 rounded-lg text-xs font-black transition-all shadow-md uppercase tracking-wider ${filter === diff.toLowerCase() ? "bg-orange-500 text-white scale-105" : "bg-white text-gray-600 border border-gray-200 hover:bg-gray-50 hover:border-gray-300"}`}
+              onClick={() => setFilter("all")}
+              className={`px-4 py-2 rounded-lg text-xs font-black transition-all shadow-md uppercase tracking-wider ${filter === "all" ? "bg-orange-500 text-white scale-105" : "bg-white text-gray-600 border border-gray-200 hover:bg-gray-50 hover:border-gray-300"}`}
             >
-              Cấp độ: {diff}
+              Toàn bộ cấp độ
             </button>
-          ))}
-          {questions.some((q: any) => !parseExplanation(q.explanation).diff) && (
-             <button
-                onClick={() => setFilter("none")}
-                className={`px-4 py-2 rounded-lg text-xs font-black transition-all shadow-md uppercase tracking-wider ${filter === "none" ? "bg-gray-600 text-white scale-105" : "bg-white text-gray-400 border border-gray-200 hover:bg-gray-50 hover:border-gray-300"}`}
-             >
-               Chưa phân loại
-             </button>
-          )}
+            {uniqueDifficulties.map((diff: any) => (
+              <button
+                key={diff}
+                onClick={() => setFilter(diff.toLowerCase())}
+                className={`px-4 py-2 rounded-lg text-xs font-black transition-all shadow-md uppercase tracking-wider ${filter === diff.toLowerCase() ? "bg-orange-500 text-white scale-105" : "bg-white text-gray-600 border border-gray-200 hover:bg-gray-50 hover:border-gray-300"}`}
+              >
+                Cấp độ: {diff}
+              </button>
+            ))}
+            {questions.some((q: any) => !parseExplanation(q.explanation).diff) && (
+               <button
+                  onClick={() => setFilter("none")}
+                  className={`px-4 py-2 rounded-lg text-xs font-black transition-all shadow-md uppercase tracking-wider ${filter === "none" ? "bg-gray-600 text-white scale-105" : "bg-white text-gray-400 border border-gray-200 hover:bg-gray-50 hover:border-gray-300"}`}
+               >
+                 Chưa phân loại
+               </button>
+            )}
+          </div>
+          
+          <div className="h-[1px] bg-orange-100/50" />
+
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-sm font-bold text-blue-600 mr-2 uppercase tracking-tight shrink-0 md:w-32">Loại câu hỏi:</span>
+            <button
+              onClick={() => setTypeFilter("all")}
+              className={`px-4 py-2 rounded-lg text-xs font-black transition-all shadow-md uppercase tracking-wider ${typeFilter === "all" ? "bg-blue-600 text-white scale-105" : "bg-white text-gray-600 border border-gray-200 hover:bg-gray-50 hover:border-gray-300"}`}
+            >
+              Tất cả loại
+            </button>
+            {uniqueTypes.map((type: any) => {
+              const label = getTypeLabel(type);
+              return (
+                <button
+                  key={type}
+                  onClick={() => setTypeFilter(type)}
+                  className={`px-4 py-2 rounded-lg text-xs font-black transition-all shadow-md uppercase tracking-wider ${typeFilter === type ? "bg-blue-600 text-white scale-105" : "bg-white text-gray-600 border border-gray-200 hover:bg-gray-50 hover:border-gray-300"}`}
+                >
+                  {label.text}
+                </button>
+              );
+            })}
+          </div>
         </div>
       )}
 

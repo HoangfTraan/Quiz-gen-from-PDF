@@ -1,9 +1,9 @@
 import { createClient } from "@/utils/supabase/server";
-import SearchInput from "./SearchInput";
-import QuestionTable from "./QuestionTable";
-import Pagination from "./Pagination";
+import SearchInput from "../questions/SearchInput";
+import FlaggedQuestionTable from "./FlaggedQuestionTable";
+import Pagination from "../questions/Pagination";
 
-export default async function AdminQuestionsPage(props: {
+export default async function AdminFlaggedQuestionsPage(props: {
   searchParams: Promise<{ q?: string; page?: string }>;
 }) {
   const searchParams = await props.searchParams;
@@ -17,7 +17,7 @@ export default async function AdminQuestionsPage(props: {
   let countQuery = supabase
     .from('questions')
     .select('*', { count: 'exact', head: true })
-    .or('moderation_status.is.null,moderation_status.eq.approved,moderation_status.eq.pending');
+    .in('moderation_status', ['flagged', 'error']);
   
   // Apply filter to count if exists
   if (query) {
@@ -42,7 +42,7 @@ export default async function AdminQuestionsPage(props: {
         )
       )
     `)
-    .or('moderation_status.is.null,moderation_status.eq.approved,moderation_status.eq.pending');
+    .in('moderation_status', ['flagged', 'error']);
 
   // Apply Filter first
   if (query) {
@@ -60,14 +60,14 @@ export default async function AdminQuestionsPage(props: {
   return (
     <div>
       <div className="flex justify-between items-center mb-6">
-        <h1 className="text-2xl font-extrabold text-gray-900">Ngân hàng Câu hỏi toàn hệ thống</h1>
+        <h1 className="text-2xl font-extrabold text-gray-900">Câu hỏi bị lỗi / Kém chất lượng</h1>
       </div>
       <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
         <div className="p-4 border-b border-gray-200">
           <SearchInput />
         </div>
         <div className="animate-page-fade" key={`${query}-${page}`}>
-          <QuestionTable questions={questions as any || []} />
+          <FlaggedQuestionTable questions={questions as any || []} />
           <Pagination 
             currentPage={page} 
             totalPages={totalPages} 
