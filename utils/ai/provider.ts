@@ -20,6 +20,13 @@ import { GoogleGenerativeAI } from '@google/generative-ai';
 type ProviderName = 'CloudAI' | 'Gemini' | 'LocalAI';
 type OutputMode = 'json' | 'text';
 
+interface AIUsage {
+  promptTokens: number;
+  completionTokens: number;
+  totalTokens: number;
+  cachedTokens: number;
+}
+
 interface AIResult {
   /** Provider thực tế đã trả kết quả */
   source: ProviderName;
@@ -27,6 +34,8 @@ interface AIResult {
   fallback: boolean;
   /** Nội dung trả về (string hoặc parsed object tùy mode) */
   content: string;
+  /** Thông tin token usage */
+  usage: AIUsage;
 }
 
 // ==========================================
@@ -72,7 +81,7 @@ async function callCloudAI(
   prompt: string,
   systemPrompt: string,
   mode: OutputMode
-): Promise<string> {
+): Promise<{ content: string; usage: AIUsage }> {
   const client = getCloudAIClient();
   if (!client) throw new Error('[AI] Missing AI_API_KEY');
 
@@ -91,14 +100,22 @@ async function callCloudAI(
 
   const text = completion.choices[0]?.message?.content;
   if (!text) throw new Error('[AI/CloudAI] Empty response');
-  return text;
+  
+  const usage = {
+    promptTokens: completion.usage?.prompt_tokens || 0,
+    completionTokens: completion.usage?.completion_tokens || 0,
+    totalTokens: completion.usage?.total_tokens || 0,
+    cachedTokens: (completion.usage as any)?.prompt_tokens_details?.cached_tokens || 0,
+  };
+
+  return { content: text, usage };
 }
 
 async function callGemini(
   prompt: string,
   _systemPrompt: string, // Gemini dùng prompt duy nhất, ghép system vào đầu
   mode: OutputMode
-): Promise<string> {
+): Promise<{ content: string; usage: AIUsage }> {
   const client = getGeminiClient();
   if (!client) throw new Error('[AI] Missing GEMINI_API_KEY');
 
@@ -119,14 +136,22 @@ async function callGemini(
   const result = await model.generateContent(fullPrompt);
   const text = result.response.text();
   if (!text) throw new Error('[AI/Gemini] Empty response');
-  return text;
+
+  const usage = {
+    promptTokens: result.response.usageMetadata?.promptTokenCount || 0,
+    completionTokens: result.response.usageMetadata?.candidatesTokenCount || 0,
+    totalTokens: result.response.usageMetadata?.totalTokenCount || 0,
+    cachedTokens: (result.response.usageMetadata as any)?.cachedContentTokenCount || 0,
+  };
+
+  return { content: text, usage };
 }
 
 async function callLocalAI(
   prompt: string,
   systemPrompt: string,
   mode: OutputMode
-): Promise<string> {
+): Promise<{ content: string; usage: AIUsage }> {
   const client = getLocalAiClient();
   const modelName = process.env.LOCAL_AI_MODEL || 'llama3';
   if (!client) throw new Error('[AI] Missing LOCAL_AI_URL');
@@ -143,7 +168,15 @@ async function callLocalAI(
 
   const text = completion.choices[0]?.message?.content;
   if (!text) throw new Error(`[AI/LocalAI] Empty response from model ${modelName}`);
-  return text;
+
+  const usage = {
+    promptTokens: completion.usage?.prompt_tokens || 0,
+    completionTokens: completion.usage?.completion_tokens || 0,
+    totalTokens: completion.usage?.total_tokens || 0,
+    cachedTokens: (completion.usage as any)?.prompt_tokens_details?.cached_tokens || 0,
+  };
+
+  return { content: text, usage };
 }
 
 // ==========================================
@@ -151,7 +184,7 @@ async function callLocalAI(
 // ==========================================
 const providers: Record<
   ProviderName,
-  (prompt: string, systemPrompt: string, mode: OutputMode) => Promise<string>
+  (prompt: string, systemPrompt: string, mode: OutputMode) => Promise<{ content: string; usage: AIUsage }>
 > = {
   CloudAI: callCloudAI,
   Gemini: callGemini,
@@ -173,8 +206,8 @@ async function callWithFallback(
   if (process.env.USE_LOCAL_AI === 'true') {
     console.log(`[AI] Bypassing cloud, using Local AI (${process.env.LOCAL_AI_URL})`);
     try {
-      const content = await callLocalAI(prompt, systemPrompt, mode);
-      return { source: 'LocalAI', fallback: false, content };
+      const { content, usage } = await callLocalAI(prompt, systemPrompt, mode);
+      return { source: 'LocalAI', fallback: false, content, usage };
     } catch (err: any) {
       console.error(`[AI/Local] Error:`, err);
       throw new Error(`Kết nối Local AI thất bại. Xin kiểm tra lại xem server đã chạy tại ${process.env.LOCAL_AI_URL} chưa. Chi tiết lỗi: ${err.message}`);
@@ -190,9 +223,9 @@ async function callWithFallback(
   // Thử primary
   try {
     console.log(`[AI] Request #${callCounter} -> Primary: ${primary}`);
-    const content = await providers[primary](prompt, systemPrompt, mode);
+    const { content, usage } = await providers[primary](prompt, systemPrompt, mode);
     console.log(`[AI] ${primary} responded successfully`);
-    return { source: primary, fallback: false, content };
+    return { source: primary, fallback: false, content, usage };
   } catch (primaryErr: any) {
     console.warn(
       `[AI] ${primary} failed: ${primaryErr.message}. Switching to ${fallbackName}...`
@@ -201,9 +234,9 @@ async function callWithFallback(
 
   // Fallback
   try {
-    const content = await providers[fallbackName](prompt, systemPrompt, mode);
+    const { content, usage } = await providers[fallbackName](prompt, systemPrompt, mode);
     console.log(`[AI] ${fallbackName} (fallback) responded successfully`);
-    return { source: fallbackName, fallback: true, content };
+    return { source: fallbackName, fallback: true, content, usage };
   } catch (fallbackErr: any) {
     console.error(
       `[AI] Both providers failed. Last error: ${fallbackErr.message}`
@@ -225,7 +258,7 @@ async function callWithFallback(
 export async function generateJSON<T = any>(
   prompt: string,
   systemPrompt: string = 'Bạn là trợ lý AI. Trả về JSON chuẩn.'
-): Promise<{ source: ProviderName; fallback: boolean; data: T }> {
+): Promise<{ source: ProviderName; fallback: boolean; data: T; usage: AIUsage }> {
   const result = await callWithFallback(prompt, systemPrompt, 'json');
   let content = result.content.trim();
   let data: T;
@@ -255,7 +288,7 @@ export async function generateJSON<T = any>(
   }
   // KẾT THÚC QUÁ TRÌNH CHUẨN HÓA JSON ==========================================
 
-  return { source: result.source, fallback: result.fallback, data };
+  return { source: result.source, fallback: result.fallback, data, usage: result.usage };
 }
 
 /**
@@ -265,9 +298,9 @@ export async function generateJSON<T = any>(
 export async function generateText(
   prompt: string,
   systemPrompt: string = 'Bạn là trợ lý AI chuyên nghiệp.'
-): Promise<{ source: ProviderName; fallback: boolean; text: string }> {
+): Promise<{ source: ProviderName; fallback: boolean; text: string; usage: AIUsage }> {
   const result = await callWithFallback(prompt, systemPrompt, 'text');
-  return { source: result.source, fallback: result.fallback, text: result.content };
+  return { source: result.source, fallback: result.fallback, text: result.content, usage: result.usage };
 }
 
 /**

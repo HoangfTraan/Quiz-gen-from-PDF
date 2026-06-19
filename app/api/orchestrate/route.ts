@@ -154,11 +154,25 @@ async function analyzeDocument(documentId: string, supabase: any) {
             if (previewText) {
                 const prompt = `Viết một đoạn tóm tắt ngắn gọn và súc tích (khoảng 2-3 câu bằng Tiếng Việt) phản ánh nội dung chính của chương sau đây. Không thêm bất kỳ lời bình luận hay giải thích nào khác.\n\nTên chương: ${ch.title}\n\nNội dung chương:\n"""\n${previewText}\n"""`;
                 try {
-                    const { text } = await generateText(
+                    const { text, usage, source } = await generateText(
                         prompt,
                         'Bạn là một trợ lý giáo dục chuyên nghiệp. Viết tóm tắt chương ngắn gọn, súc tích bằng Tiếng Việt.'
                     );
                     summary = text.trim();
+                    
+                    // Log token usage
+                    await supabase.from('ai_jobs').insert({
+                        document_id: documentId,
+                        job_type: 'summarize_chapter',
+                        status: 'completed',
+                        input_payload: { prompt },
+                        output_payload: { text },
+                        prompt_tokens: usage.promptTokens,
+                        completion_tokens: usage.completionTokens,
+                        total_tokens: usage.totalTokens,
+                        cached_tokens: usage.cachedTokens,
+                        finished_at: new Date().toISOString()
+                    });
                 } catch (err) {
                     console.error(`[Orchestrate/${documentId}] Failed to generate summary for chapter ${ch.index}:`, err);
                     // Fallback to text excerpt
@@ -197,7 +211,7 @@ async function analyzeDocument(documentId: string, supabase: any) {
         const prompt = `Đọc phần đầu của tài liệu sau và trả về ĐÚNG ĐỊNH DẠNG JSON.\n{"summary": "Tóm tắt khoảng 2-3 câu", "keywords": ["Từ khóa 1", "Từ khóa 2"]}\nNội dung:\n"""${previewText}\n"""`;
 
         try {
-            const { data: aiData } = await generateJSON(
+            const { data: aiData, usage, source } = await generateJSON(
                 prompt,
                 'Bạn là một chuyên gia phân tích dữ liệu. Trả về JSON chuẩn.'
             );
@@ -205,6 +219,20 @@ async function analyzeDocument(documentId: string, supabase: any) {
                 summary: aiData.summary,
                 keywords: aiData.keywords
             }).eq('document_id', documentId);
+            
+            // Log token usage
+            await supabase.from('ai_jobs').insert({
+                document_id: documentId,
+                job_type: 'summarize_document',
+                status: 'completed',
+                input_payload: { prompt },
+                output_payload: aiData,
+                prompt_tokens: usage.promptTokens,
+                completion_tokens: usage.completionTokens,
+                total_tokens: usage.totalTokens,
+                cached_tokens: usage.cachedTokens,
+                finished_at: new Date().toISOString()
+            });
         } catch (err) {
             console.error(`[Orchestrate/${documentId}] Summary error:`, err);
             // Không throw — summary không bắt buộc
@@ -251,35 +279,30 @@ async function generateQuestionsFromChapters(
         .select('id', { count: 'exact', head: true })
         .eq('document_id', documentId);
 
-    // Tạo quiz nếu chưa có
-    const { data: existingQuiz } = await supabase
+    // Đếm số lượng quiz đã tạo cho document này để đặt tên
+    const { count: quizCount } = await supabase
         .from('quizzes')
-        .select('id')
+        .select('id', { count: 'exact', head: true })
+        .eq('document_id', documentId);
+
+    const { data: contentData } = await supabase
+        .from('document_contents')
+        .select('keywords')
         .eq('document_id', documentId)
         .maybeSingle();
 
-    let quizId = existingQuiz?.id;
+    const keywords = contentData?.keywords || [];
+    const versionTitle = quizCount && quizCount > 0 ? ` (Lần ${quizCount + 1})` : '';
 
-    if (!quizId) {
-        const { data: contentData } = await supabase
-            .from('document_contents')
-            .select('keywords')
-            .eq('document_id', documentId)
-            .single();
+    const { data: quiz, error: quizError } = await supabase.from('quizzes').insert({
+        document_id: documentId,
+        user_id: doc.user_id,
+        title: `Bộ đề trắc nghiệm: ${keywords[0] || doc.title || 'Tài liệu mới'}${versionTitle}`,
+        status: 'draft'
+    }).select().single();
 
-        const keywords = contentData?.keywords || [];
-        await supabase.from('quizzes').delete().eq('document_id', documentId);
-
-        const { data: quiz, error: quizError } = await supabase.from('quizzes').insert({
-            document_id: documentId,
-            user_id: doc.user_id,
-            title: `Bộ đề trắc nghiệm: ${keywords[0] || doc.title || 'Tài liệu mới'}`,
-            status: 'draft'
-        }).select().single();
-
-        if (quizError) throw new Error('Không thể tạo bộ đề: ' + quizError.message);
-        quizId = quiz?.id;
-    }
+    if (quizError) throw new Error('Không thể tạo bộ đề: ' + quizError.message);
+    const quizId = quiz.id;
 
     // Chunk nội dung từng chương và tạo câu hỏi
     const CHUNK_SIZE = 3000; // 3000 ký tự per chunk
@@ -398,10 +421,25 @@ async function generateQuestionsFromChapters(
                         selectedSections: selectedSections ? selectedSections[chapter.id] : undefined
                     });
 
-                    const { data: aiData, source } = await generateJSON(
+                    const { data: aiData, source, usage } = await generateJSON(
                         prompt,
                         SYSTEM_PROMPT_QUESTION_GENERATOR
                     );
+
+                    // Log token usage
+                    await supabase.from('ai_jobs').insert({
+                        document_id: documentId,
+                        quiz_id: quizId,
+                        job_type: 'generate_questions',
+                        status: 'completed',
+                        input_payload: { prompt },
+                        output_payload: aiData,
+                        prompt_tokens: usage.promptTokens,
+                        completion_tokens: usage.completionTokens,
+                        total_tokens: usage.totalTokens,
+                        cached_tokens: usage.cachedTokens,
+                        finished_at: new Date().toISOString()
+                    });
 
                     if (!aiData.questions || !Array.isArray(aiData.questions) || aiData.questions.length === 0) {
                         console.warn(`[Orchestrate/${documentId}] Pass ${passCount}: AI returned no questions, stopping chunk`);
@@ -434,20 +472,31 @@ async function generateQuestionsFromChapters(
                         }
 
                         const qType = q.question_type || 'mcq';
-                        const validTypes: string[] = ALL_QUESTION_TYPES;
-                        const finalType = validTypes.includes(qType) ? qType : 'mcq';
+                        // Nếu user có chọn loại câu hỏi, bắt buộc phải đúng loại
+                        if (questionTypes.length > 0 && !questionTypes.includes(qType)) return null;
+
+                        // Xác minh xem payload có đủ data cho type đó không, nếu không thì LOẠI BỎ
+                        if (qType === 'matching' && (!q.matching_pairs || q.matching_pairs.length === 0)) return null;
+                        if (['mcq', 'true_false'].includes(qType) && (!q.options || q.correct_index === undefined)) return null;
+                        if (qType === 'multi_select' && (!q.options || !q.correct_indexes)) return null;
+                        if (['short_answer', 'fill_blank'].includes(qType) && !q.correct_answer && !q.explanation) return null;
+
+                        // Đảm bảo short_answer luôn có đáp án
+                        if (['short_answer', 'fill_blank'].includes(qType) && !q.correct_answer) {
+                            q.correct_answer = q.explanation || 'Không có đáp án mẫu';
+                        }
 
                         return {
                             quiz_id: quizId,
                             document_chunk_id: dbChunks[ci].id,
                             question_text: q.question_text,
-                            question_type: finalType,
+                            question_type: qType,
                             explanation: `[MỨC ĐỘ: ${diff.toUpperCase()}] ${q.explanation || ''}`,
                             difficulty: diff,
                             ai_generated: true,
                             quality_score: 100
                         };
-                    });
+                    }).filter(Boolean);
 
                     const { data: dbQuestions, error: qErr } = await supabase
                         .from('questions')
@@ -538,6 +587,7 @@ async function generateQuestionsFromChapters(
 
     await supabase.from('documents').update({ status: 'completed' }).eq('id', documentId);
     console.log(`[Orchestrate/${documentId}] Phase 2 COMPLETED — ${totalInserted} questions generated`);
+    return { generatedCount: totalInserted };
 }
 
 // ==========================================
@@ -575,6 +625,7 @@ export async function POST(request: Request) {
             const validBloomLevels: string[] = Array.isArray(bloomLevels) ? bloomLevels : [];
             const validQuestionTypes: QuestionType[] = Array.isArray(questionTypes) ? questionTypes : ['mcq'];
 
+            let genResult = { generatedCount: 0 };
             if (!selectedChapterIds || !Array.isArray(selectedChapterIds) || selectedChapterIds.length === 0) {
                 const { data: allChapters } = await longRunClient
                     .from('chapters')
@@ -587,13 +638,19 @@ export async function POST(request: Request) {
                     return NextResponse.json({ error: 'Chưa phân tích chương. Vui lòng chạy phase analyze trước.' }, { status: 400 });
                 }
 
-                await generateQuestionsFromChapters(documentId, allIds, targetQuestions, validBloomLevels, validQuestionTypes, longRunClient, selectedSections);
+                genResult = await generateQuestionsFromChapters(documentId, allIds, targetQuestions, validBloomLevels, validQuestionTypes, longRunClient, selectedSections) || { generatedCount: 0 };
             } else {
-                await generateQuestionsFromChapters(documentId, selectedChapterIds, targetQuestions, validBloomLevels, validQuestionTypes, longRunClient, selectedSections);
+                genResult = await generateQuestionsFromChapters(documentId, selectedChapterIds, targetQuestions, validBloomLevels, validQuestionTypes, longRunClient, selectedSections) || { generatedCount: 0 };
             }
 
             cleanup(); // Clear refresh interval
-            return NextResponse.json({ success: true, phase: 'generate', message: 'Tạo câu hỏi hoàn tất' });
+            return NextResponse.json({ 
+                success: true, 
+                phase: 'generate', 
+                message: 'Tạo câu hỏi hoàn tất',
+                generatedCount: genResult.generatedCount,
+                requestedCount: targetQuestions
+            });
         }
 
         cleanup();

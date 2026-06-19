@@ -110,11 +110,15 @@ export default function DocumentAnalysisPage({ params }: { params: Promise<{ id:
   const resolvedParams = use(params);
   const documentId = resolvedParams.id;
   const searchParams = useSearchParams();
-  const questionCount = parseInt(searchParams.get('questionCount') || '20', 10);
+  const isNewQuiz = searchParams.get('new') === 'true';
+  
+  const [questionCount, setQuestionCount] = useState(parseInt(searchParams.get('questionCount') || '20', 10));
+  
   const bloomLevelsParam = searchParams.get('bloomLevels') || '';
-  const bloomLevels = bloomLevelsParam ? bloomLevelsParam.split(',') : [];
+  const [bloomLevels, setBloomLevels] = useState<string[]>(bloomLevelsParam ? bloomLevelsParam.split(',') : []);
+  
   const questionTypesParam = searchParams.get('questionTypes') || '';
-  const questionTypes = questionTypesParam ? questionTypesParam.split(',') : ['mcq'];
+  const [questionTypes, setQuestionTypes] = useState<string[]>(questionTypesParam ? questionTypesParam.split(',') : ['mcq']);
 
   // Phase state
   const [phase, setPhase] = useState<AnalysisPhase>('loading');
@@ -236,7 +240,12 @@ export default function DocumentAnalysisPage({ params }: { params: Promise<{ id:
 
         if (doc.status === 'completed') {
           clearInterval(pollInterval);
-          const { data: qz } = await supabase.from('quizzes').select('id').eq('document_id', documentId).single();
+          if (isNewQuiz) {
+             if (mounted) await loadChapters();
+             return;
+          }
+          
+          const { data: qz } = await supabase.from('quizzes').select('id').eq('document_id', documentId).order('created_at', { ascending: false }).limit(1).maybeSingle();
           if (qz && mounted) {
             if (canReviewRef.current) {
               router.push(`/quizzes/${qz.id}?targetCount=${questionCount}`);
@@ -521,23 +530,32 @@ export default function DocumentAnalysisPage({ params }: { params: Promise<{ id:
     setGenProgressPercent(5);
     setGenProgressText("Đang chuẩn bị tạo câu hỏi...");
 
+    const { count: initialQuizCountRes } = await supabase.from('quizzes').select('id', { count: 'exact', head: true }).eq('document_id', documentId);
+    const initialQuizCount = initialQuizCountRes || 0;
+
+    let hasSeenProcessing = false;
+
     // Poll generation progress
     const pollGen = setInterval(async () => {
       try {
         const { data: doc } = await supabase.from('documents').select('status').eq('id', documentId).single();
         if (!doc) return;
 
-        if (doc.status === 'completed') {
+        if (doc.status === 'processing') {
+           hasSeenProcessing = true;
+        }
+
+        if (doc.status === 'completed' && hasSeenProcessing) {
           clearInterval(pollGen);
-          const { data: qz } = await supabase.from('quizzes').select('id').eq('document_id', documentId).single();
+          const { data: qz } = await supabase.from('quizzes').select('id').eq('document_id', documentId).order('created_at', { ascending: false }).limit(1).maybeSingle();
           if (qz) {
             if (roleLoadingRef.current) return;
             if (canReviewRef.current) {
-              router.push(`/quizzes/${qz.id}?targetCount=${actualCount}${isCapped ? `&capped=true&originalCount=${questionCount}` : ''}`);
+              router.push(`/quizzes/${qz.id}?targetCount=${actualCount}${isCapped ? '&capped=true&originalCount=' + questionCount : ''}`);
             } else if (canTakeRef.current) {
-              router.push(`/quizzes/${qz.id}/start?targetCount=${actualCount}${isCapped ? `&capped=true&originalCount=${questionCount}` : ''}`);
+              router.push(`/quizzes/${qz.id}/start?targetCount=${actualCount}${isCapped ? '&capped=true&originalCount=' + questionCount : ''}`);
             } else {
-              router.push(`/quizzes/${qz.id}?targetCount=${actualCount}${isCapped ? `&capped=true&originalCount=${questionCount}` : ''}`);
+              router.push(`/quizzes/${qz.id}?targetCount=${actualCount}${isCapped ? '&capped=true&originalCount=' + questionCount : ''}`);
             }
           }
           return;
@@ -551,15 +569,18 @@ export default function DocumentAnalysisPage({ params }: { params: Promise<{ id:
           return;
         }
 
-        // Check question count
-        const { data: qz } = await supabase.from('quizzes').select('id').eq('document_id', documentId).maybeSingle();
-        if (qz?.id) {
-          const { count } = await supabase.from('questions').select('id', { count: 'exact', head: true }).eq('quiz_id', qz.id);
-          const qCount = count || 0;
-          const targetQ = Math.max(5, Math.min(200, actualCount));
-          setGenProgressText(`Đang sinh câu hỏi từ AI (${qCount}/${targetQ} câu)...`);
-          const pct = Math.floor(10 + (qCount / targetQ) * 85);
-          setGenProgressPercent(Math.min(99, pct));
+        // Check question count (chỉ theo dõi quiz mới nhất sau khi đã insert)
+        const { count: currentQuizCount } = await supabase.from('quizzes').select('id', { count: 'exact', head: true }).eq('document_id', documentId);
+        if (currentQuizCount && currentQuizCount > initialQuizCount) {
+          const { data: qz } = await supabase.from('quizzes').select('id').eq('document_id', documentId).order('created_at', { ascending: false }).limit(1).maybeSingle();
+          if (qz?.id) {
+            const { count } = await supabase.from('questions').select('id', { count: 'exact', head: true }).eq('quiz_id', qz.id);
+            const qCount = count || 0;
+            const targetQ = Math.max(5, Math.min(200, actualCount));
+            setGenProgressText(`Đang sinh câu hỏi từ AI (${qCount}/${targetQ} câu)...`);
+            const pct = Math.floor(10 + (qCount / targetQ) * 85);
+            setGenProgressPercent(Math.min(99, pct));
+          }
         }
       } catch (err) {
         console.error("pollGen error:", err);
@@ -593,7 +614,22 @@ export default function DocumentAnalysisPage({ params }: { params: Promise<{ id:
         return;
       }
 
-      // API trả về thành công → đợi poll detect completed
+      // API trả về thành công
+      clearInterval(pollGen);
+      const { data: qz } = await supabase.from('quizzes').select('id').eq('document_id', documentId).order('created_at', { ascending: false }).limit(1).maybeSingle();
+      if (qz) {
+         const isShortfall = typeof result.generatedCount === 'number' && result.generatedCount < result.requestedCount;
+         const shortfallParam = isShortfall ? `&shortfall=${result.requestedCount - result.generatedCount}` : '';
+         const urlSuffix = `?targetCount=${actualCount}${isCapped ? `&capped=true&originalCount=${questionCount}` : ''}${shortfallParam}`;
+
+         if (canReviewRef.current) {
+           router.push(`/quizzes/${qz.id}${urlSuffix}`);
+         } else if (canTakeRef.current) {
+           router.push(`/quizzes/${qz.id}/start${urlSuffix}`);
+         } else {
+           router.push(`/quizzes/${qz.id}${urlSuffix}`);
+         }
+      }
     } catch (err: any) {
       clearInterval(pollGen);
       setPhase('error');
@@ -785,6 +821,101 @@ export default function DocumentAnalysisPage({ params }: { params: Promise<{ id:
                   </p>
                 </div>
               </div>
+            )}
+
+            {/* Cấu hình bộ đề (Question Count, Bloom, Types) */}
+            {isNewQuiz && (
+            <div className="w-full text-left bg-gray-50 p-5 rounded-xl border border-gray-100 mb-6">
+              <h3 className="font-extrabold text-gray-800 mb-4 flex items-center gap-2">
+                <Sparkles size={18} className="text-blue-500" /> Cấu hình bộ đề
+              </h3>
+              
+              <div className="mb-5">
+                <label className="block text-xs font-bold text-gray-500 mb-2 uppercase tracking-wider">Số câu hỏi muốn tạo</label>
+                <div className="grid grid-cols-5 gap-2">
+                  {[10, 20, 30, 50, 100].map(num => (
+                    <button
+                      key={num}
+                      type="button"
+                      onClick={() => setQuestionCount(num)}
+                      className={`py-2 rounded-lg font-bold text-sm border-2 transition-all ${
+                        questionCount === num
+                          ? 'bg-blue-600 text-white border-blue-600 shadow-md scale-[1.02]'
+                          : 'bg-white text-gray-600 border-gray-200 hover:border-blue-300 hover:text-blue-600'
+                      }`}
+                    >
+                      {num}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="mb-5">
+                <label className="block text-xs font-bold text-gray-500 mb-2 uppercase tracking-wider">Cấp độ Bloom Taxonomy</label>
+                <div className="grid grid-cols-3 sm:grid-cols-6 gap-2">
+                  {(["Nhớ", "Hiểu", "Vận dụng", "Phân tích", "Đánh giá", "Sáng tạo"] as const).map(level => {
+                    const isSelected = bloomLevels.includes(level);
+                    return (
+                      <button
+                        key={level}
+                        type="button"
+                        onClick={() => {
+                          setBloomLevels(prev =>
+                            prev.includes(level)
+                              ? prev.filter(l => l !== level)
+                              : [...prev, level]
+                          );
+                        }}
+                        className={`py-2 rounded-lg font-bold text-xs border-2 transition-all ${
+                          isSelected
+                            ? 'bg-indigo-600 text-white border-indigo-600 shadow-md scale-[1.02]'
+                            : 'bg-white text-gray-600 border-gray-200 hover:border-indigo-300 hover:text-indigo-600'
+                        }`}
+                      >
+                        {level}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-gray-500 mb-2 uppercase tracking-wider">Loại câu hỏi</label>
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                  {([
+                    { key: 'mcq', label: 'Trắc nghiệm', icon: '📝' },
+                    { key: 'true_false', label: 'Đúng/Sai', icon: '✅' },
+                    { key: 'fill_blank', label: 'Điền khuyết', icon: '✏️' },
+                    { key: 'short_answer', label: 'Trả lời ngắn', icon: '💬' },
+                    { key: 'multi_select', label: 'Nhiều đáp án', icon: '☑️' },
+                    { key: 'matching', label: 'Ghép đôi', icon: '🔗' },
+                  ] as const).map(type => {
+                    const isSelected = questionTypes.includes(type.key);
+                    return (
+                      <button
+                        key={type.key}
+                        type="button"
+                        onClick={() => {
+                          setQuestionTypes(prev =>
+                            prev.includes(type.key)
+                              ? prev.filter(t => t !== type.key)
+                              : [...prev, type.key]
+                          );
+                        }}
+                        className={`py-2 px-3 rounded-lg font-semibold text-xs border-2 transition-all flex items-center justify-center gap-1.5 whitespace-nowrap ${
+                          isSelected
+                            ? 'bg-emerald-600 text-white border-emerald-600 shadow-md scale-[1.02]'
+                            : 'bg-white text-gray-600 border-gray-200 hover:border-emerald-300 hover:text-emerald-600'
+                        }`}
+                      >
+                        <span className="text-sm">{type.icon}</span>
+                        <span className="truncate">{type.label}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
             )}
 
             {/* Generate button */}

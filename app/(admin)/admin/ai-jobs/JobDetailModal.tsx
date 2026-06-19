@@ -41,7 +41,14 @@ export default function JobDetailModal({ job, onClose }: { job: any; onClose: ()
             </div>
             <div>
               <h2 className="text-xl font-black text-gray-900 leading-none">Chi tiết xử lý AI</h2>
-              <p className="text-xs text-gray-500 mt-2 font-mono uppercase tracking-widest">Job ID: {job.id}</p>
+              <div className="flex items-center gap-2 mt-2">
+                <p className="text-xs text-gray-500 font-mono uppercase tracking-widest">Job ID: {job.id.substring(0, 8)}</p>
+                {job.total_tokens > 0 && (
+                  <span className="text-[10px] bg-indigo-50 text-indigo-600 px-2 py-0.5 rounded-full font-bold tracking-tight">
+                    {job.total_tokens.toLocaleString('vi-VN')} TOKENS
+                  </span>
+                )}
+              </div>
             </div>
           </div>
           <button 

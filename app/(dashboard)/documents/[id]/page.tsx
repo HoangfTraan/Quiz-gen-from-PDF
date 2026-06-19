@@ -73,17 +73,28 @@ export default async function DocumentDetailsPage({ params }: { params: Promise<
             </span>
           </div>
         </div>
-        {doc.status === 'completed' && (
-          canTake ? (
-            <LearnerQuizButton quizId={latestQuiz?.id} />
-          ) : (
+        {['analyzed', 'completed'].includes(doc.status) && (
+          <div className="flex flex-col sm:flex-row items-center gap-3 w-full sm:w-auto mt-4 sm:mt-0">
             <Link
-              href={teacherHref}
-              className="bg-blue-600 hover:bg-blue-700 text-white px-5 py-2.5 rounded-xl font-bold shadow-lg shadow-blue-500/30 flex items-center justify-center gap-2 transform transition hover:scale-105 shrink-0 w-full sm:w-auto text-sm sm:text-base"
+              href={doc.status === 'completed' ? `/documents/${id}/analysis?new=true` : `/documents/${id}/analysis`}
+              className="bg-white border-2 border-indigo-600 text-indigo-600 hover:bg-indigo-50 px-5 py-2 rounded-xl font-bold flex items-center justify-center gap-2 transform transition hover:scale-105 shrink-0 w-full sm:w-auto text-sm sm:text-base shadow-sm"
             >
-              <RefreshCw size={18} /> Xem câu hỏi
+              <RefreshCw size={18} /> Tạo bộ đề mới
             </Link>
-          )
+
+            {doc.status === 'completed' && latestQuiz && (
+              canTake ? (
+                <LearnerQuizButton quizId={latestQuiz.id} />
+              ) : (
+                <Link
+                  href={`/quizzes/${latestQuiz.id}`}
+                  className="bg-blue-600 hover:bg-blue-700 text-white px-5 py-2.5 rounded-xl font-bold shadow-lg shadow-blue-500/30 flex items-center justify-center gap-2 transform transition hover:scale-105 shrink-0 w-full sm:w-auto text-sm sm:text-base"
+                >
+                  <BookOpen size={18} /> Xem câu hỏi
+                </Link>
+              )
+            )}
+          </div>
         )}
       </div>
 

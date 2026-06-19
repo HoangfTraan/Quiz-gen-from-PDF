@@ -23,6 +23,8 @@ export default function ExamPage({ params }: { params: Promise<{ id: string }> }
   const router = useRouter();
   const searchParams = useSearchParams();
   const targetCount = searchParams.get("targetCount");
+  const shortfallStr = searchParams.get("shortfall");
+  const shortfall = shortfallStr ? parseInt(shortfallStr, 10) : null;
   const supabase = createClient();
   
   const [questions, setQuestions] = useState<any[]>([]);
@@ -532,7 +534,7 @@ export default function ExamPage({ params }: { params: Promise<{ id: string }> }
         </div>
       </div>
 
-      {targetCount && questions.length < parseInt(targetCount, 10) && (
+      {targetCount && questions.length < parseInt(targetCount, 10) && !shortfall && (
         <div className="mb-6 p-4 bg-blue-50 border border-blue-100 rounded-2xl flex items-start gap-3">
           <div className="w-10 h-10 rounded-xl bg-blue-100/50 flex items-center justify-center flex-shrink-0 text-blue-600 font-bold">
             💡
@@ -542,6 +544,20 @@ export default function ExamPage({ params }: { params: Promise<{ id: string }> }
             <p className="text-xs text-blue-700 mt-1 leading-relaxed">
               Hệ thống đã tạo được <strong className="text-blue-900">{questions.length}</strong> trên tổng số <strong className="text-blue-900">{targetCount}</strong> câu hỏi yêu cầu. 
               Để đảm bảo tính chính xác 100%, hệ thống cam kết <strong>chỉ sử dụng thông tin gốc</strong> và dừng lại khi đã khai thác hết nội dung trong tài liệu mà không tự bịa câu hỏi ảo ngoài lề.
+            </p>
+          </div>
+        </div>
+      )}
+
+      {shortfall && (
+        <div className="mb-6 p-4 bg-amber-50 border border-amber-200 rounded-2xl flex items-start gap-3">
+          <div className="w-10 h-10 rounded-xl bg-amber-100/50 flex items-center justify-center flex-shrink-0 text-amber-600 font-bold">
+            🛡️
+          </div>
+          <div>
+            <h4 className="font-bold text-amber-900 text-sm">Đã lọc bỏ câu hỏi không đạt chuẩn</h4>
+            <p className="text-xs text-amber-700 mt-1 leading-relaxed">
+              Hệ thống đã tự động loại bỏ <strong className="text-amber-900">{shortfall} câu hỏi</strong> do AI tạo ra vì không tuân thủ nghiêm ngặt cấu trúc của loại câu hỏi mà bạn yêu cầu. Điều này giúp bộ đề <strong className="text-amber-900">chỉ giữ lại {questions.length} câu hỏi đạt chất lượng cao nhất</strong>, đảm bảo trải nghiệm làm bài tốt nhất.
             </p>
           </div>
         </div>

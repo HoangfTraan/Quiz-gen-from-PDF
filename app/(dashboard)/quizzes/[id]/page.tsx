@@ -13,10 +13,10 @@ export default async function QuizDetailsPage({
   searchParams
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ targetCount?: string; capped?: string; originalCount?: string }>;
+  searchParams: Promise<{ targetCount?: string; capped?: string; originalCount?: string; shortfall?: string }>;
 }) {
   const { id } = await params;
-  const { targetCount, capped, originalCount } = await searchParams;
+  const { targetCount, capped, originalCount, shortfall } = await searchParams;
   const supabase = await createClient();
 
   // Lấy user hiện tại và role
@@ -124,7 +124,7 @@ export default async function QuizDetailsPage({
         </div>
       )}
 
-      {!capped && targetCount && questionCount < parseInt(targetCount, 10) && (
+      {!capped && targetCount && questionCount < parseInt(targetCount, 10) && !shortfall && (
         <div className="mb-6 p-4 bg-blue-50 border border-blue-100 rounded-2xl flex items-start gap-3">
           <div className="w-10 h-10 rounded-xl bg-blue-100/50 flex items-center justify-center flex-shrink-0 text-blue-600 font-bold">
             💡
@@ -134,6 +134,20 @@ export default async function QuizDetailsPage({
             <p className="text-xs text-blue-700 mt-1 leading-relaxed">
               Hệ thống đã tạo được <strong className="text-blue-900">{questionCount}</strong> trên tổng số <strong className="text-blue-900">{targetCount}</strong> câu hỏi yêu cầu. 
               Để đảm bảo tính chính xác 100%, hệ thống cam kết <strong>chỉ sử dụng thông tin gốc</strong> và dừng lại khi đã khai thác hết nội dung trong tài liệu mà không tự bịa câu hỏi ảo ngoài lề.
+            </p>
+          </div>
+        </div>
+      )}
+
+      {shortfall && (
+        <div className="mb-6 p-4 bg-amber-50 border border-amber-200 rounded-2xl flex items-start gap-3">
+          <div className="w-10 h-10 rounded-xl bg-amber-100/50 flex items-center justify-center flex-shrink-0 text-amber-600 font-bold">
+            🛡️
+          </div>
+          <div>
+            <h4 className="font-bold text-amber-900 text-sm">Đã lọc bỏ câu hỏi không đạt chuẩn</h4>
+            <p className="text-xs text-amber-700 mt-1 leading-relaxed">
+              Hệ thống đã tự động loại bỏ <strong className="text-amber-900">{shortfall} câu hỏi</strong> do AI tạo ra vì chúng không tuân thủ nghiêm ngặt cấu trúc của loại câu hỏi mà bạn yêu cầu. Điều này giúp bộ đề <strong className="text-amber-900">chỉ giữ lại {questionCount} câu hỏi đạt chất lượng cao nhất</strong>, đảm bảo không có lỗi hiển thị.
             </p>
           </div>
         </div>

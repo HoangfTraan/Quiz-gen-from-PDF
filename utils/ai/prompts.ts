@@ -93,6 +93,31 @@ ${ctx.selectedSections.map(s => `- ${s}`).join('\n')}
 Bạn CHỈ được phép tạo các câu hỏi liên quan và bám sát trực tiếp vào nội dung của các phần con được liệt kê ở trên nằm trong đoạn trích văn bản dưới đây. TUYỆT ĐỐI KHÔNG tạo câu hỏi từ bất kỳ nội dung nào khác của đoạn trích.`
     : '';
 
+  const formatFields: string[] = [];
+  if (ctx.questionTypes.some(t => ['mcq', 'true_false', 'multi_select'].includes(t))) {
+    formatFields.push(`      "options": ["A", "B", "C", "D"],`);
+  }
+  if (ctx.questionTypes.some(t => ['mcq', 'true_false'].includes(t))) {
+    formatFields.push(`      "correct_index": 0,`);
+  }
+  if (ctx.questionTypes.some(t => ['fill_blank', 'short_answer'].includes(t))) {
+    formatFields.push(`      "correct_answer": "Đáp án đúng",`);
+  }
+  if (ctx.questionTypes.includes('multi_select')) {
+    formatFields.push(`      "correct_indexes": [0, 2],`);
+  }
+  if (ctx.questionTypes.includes('matching')) {
+    formatFields.push(`      "matching_pairs": [{"left": "...", "right": "..."}],`);
+  }
+
+  const formatNotes: string[] = [];
+  if (ctx.questionTypes.includes('mcq')) formatNotes.push('- mcq: Dùng "options" (4 đáp án) + "correct_index" (0-3)');
+  if (ctx.questionTypes.includes('true_false')) formatNotes.push('- true_false: Dùng "options": ["Đúng", "Sai"] + "correct_index" (0 hoặc 1)');
+  if (ctx.questionTypes.includes('fill_blank')) formatNotes.push('- fill_blank: Câu hỏi BẮT BUỘC phải chứa dấu "___" (3 gạch dưới) ở chỗ cần điền + "correct_answer" chứa đáp án');
+  if (ctx.questionTypes.includes('short_answer')) formatNotes.push('- short_answer: Câu hỏi mở + "correct_answer" chứa đáp án mẫu');
+  if (ctx.questionTypes.includes('multi_select')) formatNotes.push('- multi_select: Dùng "options" (4-5 đáp án) + "correct_indexes" (mảng index đúng)');
+  if (ctx.questionTypes.includes('matching')) formatNotes.push('- matching: Dùng "matching_pairs" (mảng {left, right})');
+
   return `BỐI CẢNH TÀI LIỆU:
 - Tài liệu: "${ctx.documentTitle}"
 - Chương hiện tại: "${ctx.chapterTitle}" (Chương ${ctx.chapterIndex}/${ctx.totalChapters})
@@ -122,12 +147,8 @@ TRẢ VỀ ĐÚNG JSON:
   "questions": [
     {
       "question_text": "Nội dung câu hỏi",
-      "question_type": "Điền một trong các giá trị sau tùy theo loại câu hỏi cụ thể được tạo: ${ctx.questionTypes.join(' | ')}",
-      "options": ["A", "B", "C", "D"],
-      "correct_index": 0,
-      "correct_answer": "Đáp án đúng (cho fill_blank, short_answer)",
-      "correct_indexes": [0, 2],
-      "matching_pairs": [{"left": "...", "right": "..."}],
+      "question_type": "Điền một trong các giá trị sau: ${ctx.questionTypes.join(' | ')}",
+${formatFields.join('\n')}
       "explanation": "Giải thích chi tiết, trích dẫn từ nội dung",
       "difficulty": "Nhớ | Hiểu | Vận dụng | Phân tích | Đánh giá | Sáng tạo"
     }
@@ -135,12 +156,7 @@ TRẢ VỀ ĐÚNG JSON:
 }
 
 LƯU Ý FORMAT THEO LOẠI:
-- mcq: Dùng "options" (4 đáp án) + "correct_index" (0-3)
-- true_false: Dùng "options": ["Đúng", "Sai"] + "correct_index" (0 hoặc 1)
-- fill_blank: Câu hỏi BẮT BUỘC phải chứa dấu "___" (3 gạch dưới) ở chỗ cần điền + "correct_answer" chứa đáp án
-- short_answer: Câu hỏi mở + "correct_answer" chứa đáp án mẫu
-- multi_select: Dùng "options" (4-5 đáp án) + "correct_indexes" (mảng index đúng)
-- matching: Dùng "matching_pairs" (mảng {left, right})
+${formatNotes.join('\n')}
 
 NỘI DUNG CHƯƠNG "${ctx.chapterTitle}":
 """

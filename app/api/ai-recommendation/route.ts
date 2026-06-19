@@ -59,7 +59,7 @@ Sử dụng Markdown để in đậm những từ khóa quan trọng. Cố gắn
 DỮ LIỆU CÂU LÀM SAI:
 ${compileText}`;
 
-        const { source, text: recommendationHtml } = await generateText(
+        const { source, text: recommendationHtml, usage } = await generateText(
             prompt,
             'Bạn là Giáo sư phân tích học thuật. Trả lời bằng Markdown tiếng Việt.'
         );
@@ -73,7 +73,12 @@ ${compileText}`;
                 quiz_id: attempt.quiz_id,
                 job_type: `diagnosis_${attemptId}`,
                 status: 'completed',
+                input_payload: { prompt },
                 output_payload: { diagnosis: recommendationHtml },
+                prompt_tokens: usage.promptTokens,
+                completion_tokens: usage.completionTokens,
+                total_tokens: usage.totalTokens,
+                cached_tokens: usage.cachedTokens,
                 finished_at: new Date().toISOString()
             });
             console.log(`[AI-Rec] Cache save for ${attemptId}:`, insertErr ? `FAILED: ${insertErr.message}` : 'OK');

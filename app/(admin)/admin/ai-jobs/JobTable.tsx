@@ -39,7 +39,21 @@ export default function JobTable({ initialJobs }: { initialJobs: any[] }) {
                    </td>
                  </tr>
                ) : initialJobs.map(j => {
-                 const typeInfo = JOB_TYPE_MAP[j.job_type] || { label: j.job_type, icon: Activity, color: "text-gray-400" };
+                 let typeInfo = JOB_TYPE_MAP[j.job_type];
+                 
+                 // Handle dynamic and new job types
+                 if (!typeInfo) {
+                   if (j.job_type.startsWith('diagnosis_')) {
+                     typeInfo = JOB_TYPE_MAP['diagnosis'];
+                   } else if (j.job_type === 'summarize_chapter') {
+                     typeInfo = { label: "Tóm tắt chương", icon: Brain, color: "text-indigo-500" };
+                   } else if (j.job_type === 'summarize_document') {
+                     typeInfo = { label: "Tóm tắt tài liệu", icon: Brain, color: "text-purple-500" };
+                   } else {
+                     typeInfo = { label: j.job_type, icon: Activity, color: "text-gray-400" };
+                   }
+                 }
+
                  const Icon = typeInfo.icon;
                  
                  return (
@@ -65,7 +79,7 @@ export default function JobTable({ initialJobs }: { initialJobs: any[] }) {
                              <span className="text-gray-400 italic text-sm">N/A</span>
                            )}
                            <span className="text-[10px] text-gray-400 uppercase font-black tracking-tight italic">
-                             Tokens: {j.token_used || "N/A"}
+                             Tokens: {j.total_tokens ? j.total_tokens.toLocaleString('vi-VN') : "N/A"}
                            </span>
                         </div>
                      </td>
@@ -104,16 +118,6 @@ export default function JobTable({ initialJobs }: { initialJobs: any[] }) {
                            >
                               <Eye size={18} />
                            </button>
-                           
-                           {j.status === 'completed' && j.quiz_id && (
-                             <Link 
-                               href={`/quizzes/${j.quiz_id}`}
-                               className="p-2 text-gray-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-xl transition-all active:scale-90"
-                               title="Xem kết quả Quiz"
-                             >
-                                <ExternalLink size={18} />
-                             </Link>
-                           )}
                         </div>
                      </td>
                    </tr>

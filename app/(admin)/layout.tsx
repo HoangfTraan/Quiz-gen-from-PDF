@@ -112,7 +112,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     { name: "Câu hỏi", href: "/admin/questions", icon: HelpCircle },
     { name: "Câu hỏi bị lỗi", href: "/admin/flagged-questions", icon: AlertTriangle },
     { name: "Hồ sơ", href: "/admin/profile", icon: UserIcon },
-    // { name: "Tiến trình AI", href: "/admin/ai-jobs", icon: Activity },
+    { name: "Tiến trình AI", href: "/admin/ai-jobs", icon: Activity },
   ];
 
   return (
