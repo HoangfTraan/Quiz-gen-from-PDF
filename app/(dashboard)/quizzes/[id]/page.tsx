@@ -59,6 +59,7 @@ export default async function QuizDetailsPage({
       `
       )
       .eq("quiz_id", id)
+      .order("created_at", { ascending: true })
   ]);
 
   const quiz = quizResult.data;

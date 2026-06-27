@@ -5,6 +5,7 @@ import { Edit3, CheckCircle, ListChecks, Plus, Trash2, X, Save, Loader2, AlertTr
 import { createClient } from "@/utils/supabase/client";
 import { useRouter } from "next/navigation";
 import ConfirmModal from "@/components/ConfirmModal";
+import ReportButton from "@/components/ReportButton";
 
 const normalizeBloomLevel = (level?: string | null) => {
   if (!level) return null;
@@ -680,8 +681,8 @@ export default function QuestionList({ initialQuestions, quizId, canEdit = true 
   const uniqueDifficulties = Array.from(new Set(questions.map((q: any) => parseExplanation(q.explanation, q.difficulty).diff).filter(Boolean)));
   const uniqueTypes = Array.from(new Set(questions.map((q: any) => q.question_type || 'mcq')));
 
-  const activeQuestions = questions.filter(q => !['flagged', 'error'].includes(q.moderation_status));
-  const hiddenQuestions = questions.filter(q => ['flagged', 'error'].includes(q.moderation_status));
+  const hiddenQuestions = questions.filter(q => ['flagged', 'error', 'teacher_reported'].includes(q.moderation_status));
+  const activeQuestions = questions.filter(q => !['flagged', 'error', 'teacher_reported'].includes(q.moderation_status));
 
   return (
     <div className="space-y-6">
@@ -801,7 +802,15 @@ export default function QuestionList({ initialQuestions, quizId, canEdit = true 
         return (
           <div key={q.id} className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 relative group transition-all hover:border-blue-200 hover:shadow-md">
             {/* Nút sửa/xóa: chỉ hiện cho teacher/admin */}
-            <div className="absolute top-4 right-4 opacity-0 group-hover:opacity-100 transition-opacity flex gap-2">
+            <div className="absolute top-4 right-4 opacity-0 group-hover:opacity-100 transition-opacity flex gap-2 items-center">
+              <ReportButton 
+                questionId={q.id} 
+                onReported={() => {
+                  setQuestions(questions.map((question: any) => 
+                    question.id === q.id ? { ...question, moderation_status: "teacher_reported" } : question
+                  ));
+                }} 
+              />
               {canEdit && (
                 <>
                   <button
@@ -822,9 +831,14 @@ export default function QuestionList({ initialQuestions, quizId, canEdit = true 
               )}
             </div>
 
-            <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3 mb-5 pr-20">
+            <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3 mb-5 pr-[260px]">
               <h3 className="font-bold text-lg text-gray-800 leading-relaxed m-0">Câu {index + 1}: {q.question_text}</h3>
               <div className="flex flex-wrap gap-2 shrink-0">
+                {q.moderation_status === 'pending_review' && (
+                  <span className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-black rounded-lg uppercase tracking-wider border shadow-sm bg-amber-50 text-amber-700 border-amber-200">
+                    <AlertTriangle size={12}/> Bị báo lỗi
+                  </span>
+                )}
                 <span className={`inline-flex items-center px-2.5 py-1 text-xs font-black rounded-lg uppercase tracking-wider border shadow-sm ${parseExplanation(q.explanation, q.difficulty).diff ? "bg-indigo-50 text-indigo-700 border-indigo-200" : "bg-gray-50 text-gray-400 border-gray-200 italic"}`}>
                   {parseExplanation(q.explanation, q.difficulty).diff || "Chưa phân loại"}
                 </span>
@@ -906,7 +920,6 @@ export default function QuestionList({ initialQuestions, quizId, canEdit = true 
             <ShieldAlert className="text-amber-600" size={24} />
             <div>
               <h3 className="text-lg font-black text-amber-900 leading-none">Câu hỏi bị ẩn ({hiddenQuestions.length})</h3>
-              <p className="text-xs text-amber-600 mt-1 font-bold uppercase tracking-tight">Đang chờ AI học lại hoặc Admin chỉnh sửa</p>
             </div>
           </div>
 

@@ -119,7 +119,8 @@ export default function ExamPage({ params }: { params: Promise<{ id: string }> }
           .from('questions')
           .select(`id, question_text, question_type, explanation,
             question_options (id, option_label, option_text, is_correct)`)
-          .eq('quiz_id', id);
+          .eq('quiz_id', id)
+          .order('created_at', { ascending: true });
         if (data) setQuestions(data);
       }
       setLoading(false);

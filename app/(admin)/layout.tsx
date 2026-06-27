@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { 
   Users, 
   Files, 
@@ -26,7 +26,27 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
   const [pendingRequestsCount, setPendingRequestsCount] = useState(0);
   const pathname = usePathname();
+  const router = useRouter();
   const supabase = createClient();
+
+  // Thêm logic Auto-refresh toàn cục cho Admin
+  useEffect(() => {
+    const onVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        router.refresh();
+      }
+    };
+    document.addEventListener("visibilitychange", onVisibilityChange);
+
+    const pollInterval = setInterval(() => {
+      router.refresh();
+    }, 15000); // 15 seconds
+
+    return () => {
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+      clearInterval(pollInterval);
+    };
+  }, [router]);
 
   useEffect(() => {
     const fetchUser = async () => {
@@ -109,7 +129,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     { name: "Người dùng", href: "/admin/users", icon: Users },
     { name: "Yêu cầu quyền", href: "/admin/role-requests", icon: UserPlus },
     { name: "Tài liệu", href: "/admin/documents", icon: Files },
-    { name: "Câu hỏi", href: "/admin/questions", icon: HelpCircle },
+    // { name: "Câu hỏi", href: "/admin/questions", icon: HelpCircle },
     { name: "Câu hỏi bị lỗi", href: "/admin/flagged-questions", icon: AlertTriangle },
     { name: "Hồ sơ", href: "/admin/profile", icon: UserIcon },
     { name: "Tiến trình AI", href: "/admin/ai-jobs", icon: Activity },

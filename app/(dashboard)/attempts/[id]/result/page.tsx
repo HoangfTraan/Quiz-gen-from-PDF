@@ -1,10 +1,10 @@
 import Link from "next/link";
-import { CheckCircle, XCircle, ArrowLeft, RefreshCw, FileText, User } from "lucide-react";
+import { CheckCircle, XCircle, ArrowLeft, RefreshCw, FileText, User, AlertTriangle } from "lucide-react";
 import { createClient } from "@/utils/supabase/server";
 import { createAdminClient } from "@/utils/supabase/admin";
 import { notFound, redirect } from "next/navigation";
 import AiRecommendationCard from "./AiRecommendationCard";
-import ReportButton from "./ReportButton";
+import ReportButton from "@/components/ReportButton";
 import { getUserRole } from "@/utils/rbac-server";
 
 export default async function ResultPage({ params }: { params: Promise<{ id: string }> }) {
@@ -36,17 +36,25 @@ export default async function ResultPage({ params }: { params: Promise<{ id: str
     return notFound();
   }
 
-  // Dùng admin client để fetch answers (bypass RLS cho giáo viên)
   const { data: answers } = await adminDb
     .from('attempt_answers')
     .select(`
        id,
        is_correct,
-       questions (id, question_text, question_type, explanation, difficulty),
+       questions (id, question_text, question_type, explanation, difficulty, created_at, moderation_status),
        question_options (*),
        selected_option_id
     `)
     .eq('attempt_id', id);
+
+  // Sort answers by question created_at to maintain consistent ordering
+  if (answers) {
+    answers.sort((a: any, b: any) => {
+      const dateA = a.questions?.created_at ? new Date(a.questions.created_at).getTime() : 0;
+      const dateB = b.questions?.created_at ? new Date(b.questions.created_at).getTime() : 0;
+      return dateA - dateB;
+    });
+  }
 
   // Get ALL options for each question (to display multi-select, matching etc.)
   const questionIds = answers?.map((a: any) => a.questions?.id).filter(Boolean) || [];
@@ -147,9 +155,18 @@ export default async function ResultPage({ params }: { params: Promise<{ id: str
                 <XCircle size={28} className="text-red-500 absolute top-6 right-6" />
               )}
 
-              <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-2 mb-5 pr-12">
-                <h3 className="font-bold text-lg text-gray-800 leading-relaxed m-0">Câu {index + 1}: {ans.questions?.question_text}</h3>
-                <div className="flex items-center gap-2 shrink-0 mt-1 sm:mt-0">
+              <div className="flex items-center gap-2 mb-4 pr-12 flex-wrap">
+                <h3 className="font-extrabold text-gray-800 text-lg">Câu {index + 1}: {ans.questions?.question_text}</h3>
+                {ans.questions?.moderation_status === 'error' || ans.questions?.moderation_status === 'teacher_reported' ? (
+                  <span className="inline-flex items-center gap-1 py-1 px-2.5 text-[10px] font-bold rounded-lg bg-red-50 text-red-700 border border-red-200 uppercase whitespace-nowrap">
+                    <AlertTriangle size={12} /> Đã lỗi (Không tính điểm)
+                  </span>
+                ) : ans.questions?.moderation_status === 'pending_review' ? (
+                  <span className="inline-flex items-center gap-1 py-1 px-2.5 text-[10px] font-bold rounded-lg bg-amber-50 text-amber-700 border border-amber-200 uppercase whitespace-nowrap">
+                    <AlertTriangle size={12} /> Bị báo cáo
+                  </span>
+                ) : null}
+                <div className="flex items-center gap-2 shrink-0">
                   <span className={`${typeLabel.color} px-2 py-0.5 text-[10px] font-bold rounded uppercase tracking-wider`}>{typeLabel.text}</span>
                   <span className={`inline-flex items-center px-2 py-0.5 text-[10px] font-black rounded uppercase tracking-widest border shadow-sm ${parseExplanation(ans.questions?.explanation, ans.questions?.difficulty).diff ? "bg-indigo-50 text-indigo-700 border-indigo-200" : "bg-gray-50 text-gray-400 border-gray-100 italic"}`}>
                     {parseExplanation(ans.questions?.explanation, ans.questions?.difficulty).diff || "Chưa phân loại"}
@@ -246,7 +263,7 @@ export default async function ResultPage({ params }: { params: Promise<{ id: str
                 {parseExplanation(ans.questions?.explanation, ans.questions?.difficulty).text || 'Không có giải thích cho câu hỏi này.'}
               </div>
 
-              {!isTeacherViewing && (
+              {!isTeacherViewing && !(role === 'learner' && isQuizOwner) && (
                 <div className="flex justify-end mt-4">
                   <ReportButton questionId={ans.questions?.id} />
                 </div>

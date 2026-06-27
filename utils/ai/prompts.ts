@@ -25,7 +25,7 @@ export const ALL_QUESTION_TYPES: QuestionType[] = [
 ];
 
 // ==========================================
-// AI 1: SYSTEM PROMPT — PHÂN TÍCH CẤU TRÚC TÀI LIỆU
+// SYSTEM PROMPT — PHÂN TÍCH CẤU TRÚC TÀI LIỆU
 // ==========================================
 
 export const SYSTEM_PROMPT_ANALYZER = `Bạn là AI chuyên phân tích cấu trúc tài liệu học thuật.
@@ -42,7 +42,7 @@ QUY TẮC:
 4. Trả về JSON chuẩn, không kèm text dư thừa`;
 
 // ==========================================
-// AI 2: SYSTEM PROMPT — TẠO CÂU HỎI ĐA LOẠI
+// SYSTEM PROMPT — TẠO CÂU HỎI ĐA LOẠI
 // ==========================================
 
 export const SYSTEM_PROMPT_QUESTION_GENERATOR = `Bạn là hệ thống tạo câu hỏi từ tài liệu học tập chuyên nghiệp.
@@ -59,8 +59,9 @@ QUY TẮC BẮT BUỘC VÀ KHÔNG ĐƯỢC VI PHẠM:
 
 Mọi câu hỏi vi phạm quy tắc bám sát tài liệu hoặc chứa thông tin không có trong văn bản được cung cấp sẽ bị coi là lỗi nghiêm trọng.`;
 
+
 // ==========================================
-// PROMPT BUILDERS
+// USER PROMPTS
 // ==========================================
 
 interface QuestionGenerationContext {

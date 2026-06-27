@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { BookOpen, Sparkles, BrainCircuit, ArrowRight } from "lucide-react";
+import { BookOpen, Sparkles, BrainCircuit, ArrowRight, TrendingUp } from "lucide-react";
 
 export default function LandingPage() {
   return (
@@ -20,7 +20,7 @@ export default function LandingPage() {
             Biến tài liệu của bạn thành <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-600 to-purple-600">Câu Hỏi Trắc Nghiệm</span>
          </h1>
          <p className="text-xl text-gray-500 font-medium mb-10 max-w-2xl text-balance">
-            Tải lên báo cáo PDF, giáo trình hoặc tài liệu và AI của chúng tôi sẽ tự động phân tích và tạo bộ đề xuất sắc trong vòng vài giây.
+            Tải lên báo cáo PDF, giáo trình hoặc tài liệu và AI sẽ tự động phân tích và tạo bộ đề trong vòng vài giây.
          </p>
          
          <div className="flex flex-col sm:flex-row gap-4 mb-16">
@@ -37,22 +37,22 @@ export default function LandingPage() {
                <div className="w-14 h-14 bg-blue-100 text-blue-600 flex items-center justify-center rounded-2xl mb-6">
                  <BrainCircuit size={28} />
                </div>
-               <h3 className="text-xl font-bold text-gray-900 mb-3">AI Trích xuất Thông minh</h3>
-               <p className="text-gray-500 leading-relaxed font-medium">Hệ thống phân tích cú pháp nâng cao từ các file PDF, DOCX với khả năng hiểu sâu văn cảnh.</p>
+               <h3 className="text-xl font-bold text-gray-900 mb-3">Hệ thống Trích xuất Thông minh</h3>
+               <p className="text-gray-500 leading-relaxed font-medium">Hệ thống phân tích cú pháp từ các file PDF với khả năng hiểu ngữ cảnh.</p>
             </div>
             <div className="bg-white p-8 rounded-3xl shadow-sm border border-gray-100 hover:shadow-md transition-shadow">
                <div className="w-14 h-14 bg-green-100 text-green-600 flex items-center justify-center rounded-2xl mb-6">
                  <BookOpen size={28} />
                </div>
                <h3 className="text-xl font-bold text-gray-900 mb-3">Ôn tập hiệu quả</h3>
-               <p className="text-gray-500 leading-relaxed font-medium">Cung cấp bộ đề trắc nghiệm chuẩn xác kèm theo lời giải thích cặn kẽ giúp bạn học nhanh hơn 5x.</p>
+               <p className="text-gray-500 leading-relaxed font-medium">Cung cấp bộ đề trắc nghiệm kèm theo lời giải thích cặn kẽ.</p>
             </div>
             <div className="bg-white p-8 rounded-3xl shadow-sm border border-gray-100 hover:shadow-md transition-shadow">
                <div className="w-14 h-14 bg-orange-100 text-orange-600 flex items-center justify-center rounded-2xl mb-6">
-                 <Sparkles size={28} />
+                 <TrendingUp size={28} />
                </div>
-               <h3 className="text-xl font-bold text-gray-900 mb-3">Phân tích Lịch sử</h3>
-               <p className="text-gray-500 leading-relaxed font-medium">Ghi lại toàn bộ lịch sử trả lời và thống kê điểm yếu để đưa ra lộ trình cần cải thiện.</p>
+               <h3 className="text-xl font-bold text-gray-900 mb-3">Theo dõi Tiến độ</h3>
+               <p className="text-gray-500 leading-relaxed font-medium">Lưu trữ kết quả làm bài, phân tích lỗ hổng kiến thức để hỗ trợ cho khả năng ôn tập.</p>
             </div>
          </div>
       </main>

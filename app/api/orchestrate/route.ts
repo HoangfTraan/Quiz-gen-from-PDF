@@ -159,7 +159,7 @@ async function analyzeDocument(documentId: string, supabase: any) {
                         'Bạn là một trợ lý giáo dục chuyên nghiệp. Viết tóm tắt chương ngắn gọn, súc tích bằng Tiếng Việt.'
                     );
                     summary = text.trim();
-                    
+
                     // Log token usage
                     await supabase.from('ai_jobs').insert({
                         document_id: documentId,
@@ -219,7 +219,7 @@ async function analyzeDocument(documentId: string, supabase: any) {
                 summary: aiData.summary,
                 keywords: aiData.keywords
             }).eq('document_id', documentId);
-            
+
             // Log token usage
             await supabase.from('ai_jobs').insert({
                 document_id: documentId,
@@ -305,7 +305,7 @@ async function generateQuestionsFromChapters(
     const quizId = quiz.id;
 
     // Chunk nội dung từng chương và tạo câu hỏi
-    const CHUNK_SIZE = 3000; // 3000 ký tự per chunk
+    const CHUNK_SIZE = 3000;
     const OVERLAP = 300;
     let totalInserted = 0;
 
@@ -375,8 +375,8 @@ async function generateQuestionsFromChapters(
 
         // Tính số câu hỏi per chunk trong chương này
         const chapterQuestionsRemaining = Math.min(questionsPerChapter, questionCount - totalInserted);
-        // Phân bổ đều cho các chunk, nhưng KHÔNG cap cứng — sẽ loop nhiều lần nếu cần
-        const qPerChunk = Math.max(1, Math.ceil(chapterQuestionsRemaining / chapterChunks.length));
+        // Phân bổ đều cho các chunk, đảm bảo TỐI THIỂU 5 câu mỗi chunk (nếu còn quota) để tránh việc gọi AI cho 1 câu
+        const qPerChunk = Math.max(5, Math.ceil(chapterQuestionsRemaining / chapterChunks.length));
 
         // Giới hạn AI: mỗi lần gọi tối đa 10 câu (AI quality tốt nhất ở 5-10 câu/lần)
         const AI_BATCH_SIZE = 10;
@@ -395,6 +395,7 @@ async function generateQuestionsFromChapters(
             const targetForChunk = Math.min(qPerChunk, questionCount - totalInserted);
             let chunkInserted = 0;
             let passCount = 0;
+            let generatedQuestionsInChunk: string[] = [];
 
             // Multi-pass: gọi AI nhiều lần cho cùng 1 chunk nếu cần nhiều câu hỏi
             while (chunkInserted < targetForChunk && passCount < MAX_PASSES_PER_CHUNK) {
@@ -406,6 +407,10 @@ async function generateQuestionsFromChapters(
                 const qForThisPass = Math.min(AI_BATCH_SIZE, remaining);
 
                 try {
+                    const previousQuestionsContext = generatedQuestionsInChunk.length > 0 
+                        ? `\n\nTUYỆT ĐỐI KHÔNG TẠO LẠI CÁC CÂU HỎI CÓ NỘI DUNG TƯƠNG TỰ NHƯ SAU:\n${generatedQuestionsInChunk.map(q => `- ${q}`).join('\n')}` 
+                        : '';
+
                     const prompt = buildQuestionGenerationPrompt({
                         documentTitle: doc.title,
                         chapterTitle: chapter.title,
@@ -417,7 +422,7 @@ async function generateQuestionsFromChapters(
                         questionCount: qForThisPass,
                         questionTypes: questionTypes.length > 0 ? questionTypes : ['mcq'],
                         bloomLevels,
-                        negativeExamples: negativeExamples + (passCount > 1 ? `\n\nLƯU Ý: Đây là lần tạo thứ ${passCount} cho cùng nội dung. Hãy tạo câu hỏi KHÁC BIỆT hoàn toàn so với những lần trước, tập trung vào các khía cạnh chưa được hỏi.` : ''),
+                        negativeExamples: negativeExamples + (passCount > 1 ? `\n\nLƯU Ý: Đây là lần tạo thứ ${passCount} cho cùng nội dung. Hãy tạo câu hỏi KHÁC BIỆT hoàn toàn so với những lần trước, tập trung vào các khía cạnh chưa được hỏi.` : '') + previousQuestionsContext,
                         selectedSections: selectedSections ? selectedSections[chapter.id] : undefined
                     });
 
@@ -449,6 +454,9 @@ async function generateQuestionsFromChapters(
                     // Giới hạn số câu hỏi
                     const globalRemaining = questionCount - totalInserted;
                     const questions = aiData.questions.slice(0, Math.min(globalRemaining, targetForChunk - chunkInserted));
+                    
+                    // Thêm câu hỏi vào mảng context để tránh trùng lặp ở pass sau
+                    questions.forEach((q: any) => generatedQuestionsInChunk.push(q.question_text));
 
                     const BLOOM_LEVELS = ['Nhớ', 'Hiểu', 'Vận dụng', 'Phân tích', 'Đánh giá', 'Sáng tạo'];
                     const guessBloomLevel = (text: string, explanation: string) => {
@@ -644,9 +652,9 @@ export async function POST(request: Request) {
             }
 
             cleanup(); // Clear refresh interval
-            return NextResponse.json({ 
-                success: true, 
-                phase: 'generate', 
+            return NextResponse.json({
+                success: true,
+                phase: 'generate',
                 message: 'Tạo câu hỏi hoàn tất',
                 generatedCount: genResult.generatedCount,
                 requestedCount: targetQuestions

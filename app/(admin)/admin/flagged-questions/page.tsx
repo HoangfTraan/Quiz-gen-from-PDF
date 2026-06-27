@@ -1,80 +1,62 @@
 import { createClient } from "@/utils/supabase/server";
-import SearchInput from "../questions/SearchInput";
-import FlaggedQuestionTable from "./FlaggedQuestionTable";
-import Pagination from "../questions/Pagination";
+import { AlertTriangle, CheckCircle, Percent } from "lucide-react";
+import AdminStatsChart from "./AdminStatsChart";
 
-export default async function AdminFlaggedQuestionsPage(props: {
-  searchParams: Promise<{ q?: string; page?: string }>;
-}) {
-  const searchParams = await props.searchParams;
-  const query = searchParams.q;
-  const page = parseInt(searchParams.page || "1");
-  const pageSize = 10;
-  
+export default async function AdminFlaggedQuestionsPage() {
   const supabase = await createClient();
-  
-  // 1. Build Base Count Query
-  let countQuery = supabase
-    .from('questions')
-    .select('*', { count: 'exact', head: true })
-    .in('moderation_status', ['flagged', 'error']);
-  
-  // Apply filter to count if exists
-  if (query) {
-    countQuery = countQuery.ilike('question_text', `%${query}%`);
-  }
-  
-  const { count: totalItems } = await countQuery;
-  const totalPages = Math.ceil((totalItems || 0) / pageSize);
 
-  // 2. Build Base Data Query
-  let dbQuery = supabase
-    .from('questions')
-    .select(`
-      *,
-      quizzes (
-        title,
-        documents (
-          title,
-          users (
-            full_name
-          )
-        )
-      )
-    `)
-    .in('moderation_status', ['flagged', 'error']);
+  const { data: errorQuestions, count: errorCount } = await supabase
+    .from("questions")
+    .select("id", { count: "exact" })
+    .in("moderation_status", ["error", "flagged", "teacher_reported"]);
 
-  // Apply Filter first
-  if (query) {
-    dbQuery = dbQuery.ilike('question_text', `%${query}%`);
-  }
+  const { data: totalQuestionsData, count: totalCount } = await supabase
+    .from("questions")
+    .select("id", { count: "exact" });
 
-  // Apply Order second
-  dbQuery = dbQuery.order('created_at', { ascending: false });
-
-  // Apply Range (Pagination) last
-  dbQuery = dbQuery.range((page - 1) * pageSize, page * pageSize - 1);
-
-  const { data: questions } = await dbQuery;
+  const goodCount = (totalCount || 0) - (errorCount || 0);
+  const totalQuestions = totalCount || 0;
+  const errorRate = totalQuestions > 0 ? (((errorCount || 0) / totalQuestions) * 100).toFixed(2) : "0.00";
 
   return (
     <div>
       <div className="flex justify-between items-center mb-6">
-        <h1 className="text-2xl font-extrabold text-gray-900">Câu hỏi bị lỗi / Kém chất lượng</h1>
+        <h1 className="text-2xl font-extrabold text-gray-900">Thống kê Chất lượng AI</h1>
       </div>
-      <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-        <div className="p-4 border-b border-gray-200">
-          <SearchInput />
+
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+        <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 flex items-center gap-4">
+          <div className="w-14 h-14 bg-red-50 text-red-600 flex justify-center items-center rounded-xl shrink-0">
+            <AlertTriangle size={28} />
+          </div>
+          <div>
+            <p className="text-sm font-bold text-gray-500 uppercase tracking-wide">Số câu hỏi lỗi</p>
+            <p className="text-3xl font-black text-gray-900">{errorCount || 0}</p>
+          </div>
         </div>
-        <div className="animate-page-fade" key={`${query}-${page}`}>
-          <FlaggedQuestionTable questions={questions as any || []} />
-          <Pagination 
-            currentPage={page} 
-            totalPages={totalPages} 
-            totalItems={totalItems || 0} 
-          />
+
+        <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 flex items-center gap-4">
+          <div className="w-14 h-14 bg-green-50 text-green-600 flex justify-center items-center rounded-xl shrink-0">
+            <CheckCircle size={28} />
+          </div>
+          <div>
+            <p className="text-sm font-bold text-gray-500 uppercase tracking-wide">Số câu hỏi tốt</p>
+            <p className="text-3xl font-black text-gray-900">{goodCount || 0}</p>
+          </div>
+        </div>
+
+        <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 flex items-center gap-4">
+          <div className="w-14 h-14 bg-blue-50 text-blue-600 flex justify-center items-center rounded-xl shrink-0">
+            <Percent size={28} />
+          </div>
+          <div>
+            <p className="text-sm font-bold text-gray-500 uppercase tracking-wide">Tỷ lệ lỗi (Tần suất)</p>
+            <p className="text-3xl font-black text-gray-900">{errorRate}%</p>
+          </div>
         </div>
       </div>
+
+      <AdminStatsChart goodCount={goodCount} errorCount={errorCount || 0} />
     </div>
   );
 }

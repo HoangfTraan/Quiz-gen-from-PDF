@@ -11,17 +11,27 @@ export async function reportQuestionAction(questionId: string) {
     throw new Error("Bạn phải đăng nhập để báo lỗi.");
   }
 
-  // Dùng admin client để bypass RLS (vì user bình thường có thể không có quyền update bảng questions)
   const adminDb = createAdminClient();
   
+  // Lấy thông tin câu hỏi để biết ai là chủ sở hữu bộ đề
+  const { data: question } = await adminDb
+    .from("questions")
+    .select("quizzes(user_id)")
+    .eq("id", questionId)
+    .single();
+
+  const quizUserId = Array.isArray(question?.quizzes) ? question?.quizzes[0]?.user_id : (question?.quizzes as any)?.user_id;
+  const isOwner = quizUserId === user.id;
+  const newStatus = isOwner ? "teacher_reported" : "pending_review";
+
   const { error } = await adminDb
     .from("questions")
-    .update({ moderation_status: "error" })
+    .update({ moderation_status: newStatus })
     .eq("id", questionId);
 
   if (error) {
     throw new Error(error.message);
   }
 
-  return { success: true };
+  return { success: true, newStatus };
 }

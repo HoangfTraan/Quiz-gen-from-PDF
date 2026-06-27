@@ -82,15 +82,40 @@ export default function QuizListClient({ role, userId, teacherIds = [] }: QuizLi
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "quizzes" },
-        () => {
-          // Refetch toàn bộ danh sách khi có thay đổi bất kỳ
+        (payload) => {
+          console.log("Realtime UPDATE quizzes:", payload);
           fetchQuizzes();
         }
       )
-      .subscribe();
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "quiz_attempts" },
+        (payload) => {
+          console.log("Realtime UPDATE quiz_attempts:", payload);
+          fetchQuizzes();
+        }
+      )
+      .subscribe((status) => {
+        console.log("Realtime subscription status:", status);
+      });
+
+    // Fallback 1: Refetch khi người dùng quay lại tab (window focus)
+    const onVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        fetchQuizzes();
+      }
+    };
+    document.addEventListener("visibilitychange", onVisibilityChange);
+
+    // Fallback 2: Polling mỗi 15 giây (chỉ tự động refresh ngầm)
+    const pollInterval = setInterval(() => {
+      fetchQuizzes();
+    }, 15000);
 
     return () => {
       supabase.removeChannel(channel);
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+      clearInterval(pollInterval);
     };
   }, [fetchQuizzes, supabase, userId]);
 

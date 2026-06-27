@@ -2,7 +2,7 @@
 
 import { useState, useEffect, Suspense } from "react";
 import Link from "next/link";
-import { usePathname, useSearchParams } from "next/navigation";
+import { usePathname, useSearchParams, useRouter } from "next/navigation";
 import {
   BookOpen,
   History,
@@ -36,7 +36,27 @@ function DashboardLayoutContent({
   const [userRole, setUserRole] = useState<AppRole>("user");
   const pathname = usePathname();
   const searchParams = useSearchParams();
+  const router = useRouter();
   const supabase = createClient();
+
+  // Thêm logic Auto-refresh toàn cục cho Dashboard
+  useEffect(() => {
+    const onVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        router.refresh();
+      }
+    };
+    document.addEventListener("visibilitychange", onVisibilityChange);
+
+    const pollInterval = setInterval(() => {
+      router.refresh();
+    }, 15000); // 15 seconds
+
+    return () => {
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+      clearInterval(pollInterval);
+    };
+  }, [router]);
 
   useEffect(() => {
     let isMounted = true;
@@ -155,6 +175,7 @@ function DashboardLayoutContent({
     { name: "Bộ câu hỏi", href: "/quizzes", icon: BookOpen, roles: ["teacher", "learner", "user"] },
     { name: "Lịch sử thi", href: "/history", icon: History, roles: ["learner"] },
     { name: "Kết quả thi", href: "/teacher-results", icon: BarChart, roles: ["teacher", "admin"] },
+    { name: "Câu hỏi báo lỗi", href: "/reported-questions", icon: ShieldCheck, roles: ["teacher", "admin"] },
     { name: "Hồ sơ", href: "/profile", icon: UserIcon, roles: ["admin", "teacher", "learner", "user"] },
   ].filter((item) => item.roles.includes(userRole));
 
